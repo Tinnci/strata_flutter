@@ -248,8 +248,14 @@ abstract final class MapRenderer {
     final fillPaint = Paint()..style = PaintingStyle.fill;
     final strokePaint = Paint()..style = PaintingStyle.stroke;
 
-    for (var order = 0; order < scene.top.length; order++) {
-      final index = scene.top[order];
+    // Draw resting bubbles first and hovered/lifting bubbles last so swollen
+    // pebbles and their accent strokes always appear above neighbours.
+    final topEntries = <(int order, int index)>[
+      for (var order = 0; order < scene.top.length; order++)
+        (order, scene.top[order]),
+    ]..sort((a, b) => frame.lift(a.$2).compareTo(frame.lift(b.$2)));
+
+    for (final (order, index) in topEntries) {
       final cell = scene.cells[index];
       final appear = frame.appear(order);
       if (appear <= 0.001) continue;
@@ -268,6 +274,17 @@ abstract final class MapRenderer {
       }
 
       final fill = theme.fill(cell.tone);
+      if (lift > 0.05 && cell.item.kind != MapItemKind.hidden && cell.item.kind != MapItemKind.unscanned) {
+        final shadowPaint = Paint()
+          ..color = const Color(0xFF000000).withValues(
+            alpha: (theme.isDark ? 0.28 : 0.12) * _unit(lift) * layerAlpha,
+          )
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
+        canvas.drawPath(
+          cell.outline.transform(outer).shift(const Offset(0, 3)),
+          shadowPaint,
+        );
+      }
       if (cell.children.isEmpty) {
         final path = cell.outline.transform(outer);
         fillPaint.color = fill
@@ -299,7 +316,10 @@ abstract final class MapRenderer {
           .withValues(alpha: layerAlpha);
       canvas.drawPath(cell.outline.transform(outer), fillPaint);
 
-      for (final childIndex in cell.children) {
+      final orderedChildren = List<int>.from(cell.children)
+        ..sort((a, b) => frame.lift(a).compareTo(frame.lift(b)));
+
+      for (final childIndex in orderedChildren) {
         final child = scene.cells[childIndex];
         final childLift = frame.lift(childIndex);
         final middleLocal = _scaleAbout(
@@ -344,8 +364,7 @@ abstract final class MapRenderer {
     }
 
     // Labels drawn on top of every fill.
-    for (var order = 0; order < scene.top.length; order++) {
-      final index = scene.top[order];
+    for (final (order, index) in topEntries) {
       final outer = transforms[index];
       if (outer == null) continue;
       final cell = scene.cells[index];
@@ -384,7 +403,10 @@ abstract final class MapRenderer {
       );
       if (lift <= 0.02) continue;
 
-      for (final childIndex in cell.children) {
+      final orderedChildren = List<int>.from(cell.children)
+        ..sort((a, b) => frame.lift(a).compareTo(frame.lift(b)));
+
+      for (final childIndex in orderedChildren) {
         final middle = transforms[childIndex];
         if (middle == null) continue;
         final child = scene.cells[childIndex];
@@ -451,7 +473,10 @@ abstract final class MapRenderer {
       canvas.drawPath(ribbon.path, fillPaint);
     }
 
-    for (var index = 0; index < scene.bars.length; index++) {
+    final barOrder = List<int>.generate(scene.bars.length, (i) => i)
+      ..sort((a, b) => frame.lift(a).compareTo(frame.lift(b)));
+
+    for (final index in barOrder) {
       final bar = scene.bars[index];
       final appear = frame.appear(bar.level * 4);
       if (appear <= 0.001) continue;
@@ -477,6 +502,14 @@ abstract final class MapRenderer {
         _drawFree(canvas, basePath, bar.dots, stretch, theme, layerAlpha);
         _drawLabel(canvas, bar.label, center, theme.text.color, layerAlpha);
       } else {
+        if (lift > 0.05 && bar.item.kind != MapItemKind.hidden && bar.item.kind != MapItemKind.unscanned) {
+          final shadowPaint = Paint()
+            ..color = const Color(0xFF000000).withValues(
+              alpha: (theme.isDark ? 0.26 : 0.12) * _unit(lift) * layerAlpha,
+            )
+            ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+          canvas.drawPath(shape.shift(const Offset(0, 3)), shadowPaint);
+        }
         final fill = theme.fill(bar.tone);
         fillPaint.color = fill
             .lighter(0.03 * _unit(lift))

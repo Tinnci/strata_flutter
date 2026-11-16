@@ -986,15 +986,12 @@ class _MapArea extends StatelessWidget {
           ),
         ),
         Expanded(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(6, 0, 22, 22),
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                _MapCanvas(controller: controller),
-                _HoverCardOverlay(controller: controller),
-              ],
-            ),
+          child: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              _MapCanvas(controller: controller),
+              _HoverCardOverlay(controller: controller),
+            ],
           ),
         ),
       ],
@@ -1192,23 +1189,31 @@ class _MapCanvasState extends State<_MapCanvas>
     super.dispose();
   }
 
+  static const _mapOffset = Offset(6, 0);
+
   @override
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final size = Size(constraints.maxWidth, constraints.maxHeight);
+        final outerSize = Size(constraints.maxWidth, constraints.maxHeight);
+        final mapSize = Size(
+          math.max(0.0, outerSize.width - 28.0),
+          math.max(0.0, outerSize.height - 22.0),
+        );
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) widget.controller.setMapSize(size);
+          if (mounted) widget.controller.setMapSize(mapSize);
         });
         return MouseRegion(
-          onHover: (e) => widget.controller.pointerMoved(e.localPosition),
+          onHover: (e) =>
+              widget.controller.pointerMoved(e.localPosition - _mapOffset),
           onExit: (_) => widget.controller.pointerMoved(null),
           child: GestureDetector(
-            onTapUp: (e) => widget.controller.clickedAt(e.localPosition),
+            onTapUp: (e) =>
+                widget.controller.clickedAt(e.localPosition - _mapOffset),
             onSecondaryTapUp: (e) => _showContextMenu(context, e),
             child: RepaintBoundary(
               child: CustomPaint(
-                size: size,
+                size: outerSize,
                 painter: _StrataPainter(controller: widget.controller),
               ),
             ),
@@ -1223,7 +1228,7 @@ class _MapCanvasState extends State<_MapCanvas>
     TapUpDetails details,
   ) async {
     if (!widget.controller.backend.supportsSystemActions) return;
-    final item = widget.controller.hitItemAt(details.localPosition);
+    final item = widget.controller.hitItemAt(details.localPosition - _mapOffset);
     if (item == null || !item.isEntry) return;
 
     final action = await showMenu<String>(
@@ -1424,23 +1429,28 @@ class _StrataPainter extends CustomPainter {
     if (scene == null) return;
 
     canvas.save();
+    // Clip to the full outer canvas (which includes the 6px left and 22px
+    // right/bottom margins) so swollen pebbles/bars never get sliced off by
+    // the inner layout box or RepaintBoundary layer.
     canvas.clipRect(Offset.zero & size);
+    canvas.translate(6, 0);
 
-    final motion = controller.motion;
+    final motionState = controller.motion;
+    final transition = motionState.transition;
+
     final theme = controller.theme;
     final live = MapFrame(
       theme: theme,
-      lift: motion.lift,
-      appear: motion.appear,
+      lift: motionState.lift,
+      appear: motionState.appear,
     );
 
-    final transition = motion.transition;
     if (transition != null) {
       switch (transition.kind) {
         case MapTransitionKind.morph:
           if (transition.morph != null) {
             transition.morph!.draw(
-              progress: transition.progress(motion.nowSeconds),
+              progress: transition.progress(motionState.nowSeconds),
               theme: theme,
               lifts: transition.lifts,
               flowFocus: transition.flowFocus,
@@ -1451,7 +1461,7 @@ class _StrataPainter extends CustomPainter {
           }
         case MapTransitionKind.swap:
           if (transition.previous != null) {
-            final elapsed = motion.nowSeconds - transition.startSeconds;
+            final elapsed = motionState.nowSeconds - transition.startSeconds;
             MapRenderer.drawScene(
               transition.previous!,
               frame: MapFrame.leaving(theme, elapsed),
@@ -1496,9 +1506,10 @@ class _HoverCardOverlay extends StatelessWidget {
         }
         final bounds = controller.mapSize;
         const width = 250.0;
-        final x = location.dx + 18 + width > bounds.width
-            ? location.dx - 18 - width
-            : location.dx + 18;
+        final x = (location.dx + 18 + width > bounds.width
+                ? location.dx - 18 - width
+                : location.dx + 18) +
+            6.0;
         final y = math.min(
           math.max(location.dy + 14, 0.0),
           math.max(0.0, bounds.height - 86),
