@@ -2,6 +2,10 @@
 
 A cross-platform (Windows / macOS / Linux) disk space visualizer built with **Flutter + Rust (`flutter_rust_bridge`)**, ported from and inspired by [Glimmer-X/Strata](https://github.com/Glimmer-X/Strata).
 
+<p align="center">
+  <img src="docs/images/windows-preview.jpg" alt="Strata Flutter on Windows">
+</p>
+
 ## Upstream & Attribution
 
 This project is a cross-platform port of **[Glimmer-X/Strata](https://github.com/Glimmer-X/Strata)** (MIT License, Copyright (c) 2026 Glimmer-X).
