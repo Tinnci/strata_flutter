@@ -38,6 +38,7 @@ dependencies:
   rust_lib_strata:
     path: rust_builder
   flutter_rust_bridge: 2.13.0
+  window_manager: ^0.7.0
 
 dev_dependencies:
   flutter_test:

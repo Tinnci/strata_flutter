@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
+import 'package:window_manager/window_manager.dart';
 
 import '../model/disk_backend.dart';
 import '../model/file_tree.dart';
@@ -55,6 +56,8 @@ class StrataController extends ChangeNotifier {
   DiskVolume? _selectedVolume;
   bool _scanning = false;
   bool _diskMenuOpen = false;
+  bool _settingsMenuOpen = false;
+  int _pruneBelowBytes = 1000000;
   bool _disposed = false;
   int _scanEntries = 0;
   int _scanBytes = 0;
@@ -88,6 +91,8 @@ class StrataController extends ChangeNotifier {
   DiskVolume? get selectedVolume => _selectedVolume;
   bool get scanning => _scanning;
   bool get diskMenuOpen => _diskMenuOpen;
+  bool get settingsMenuOpen => _settingsMenuOpen;
+  int get pruneBelowBytes => _pruneBelowBytes;
   int get scanEntries => _scanEntries;
   int get scanBytes => _scanBytes;
   String? get scanError => _scanError;
@@ -95,7 +100,25 @@ class StrataController extends ChangeNotifier {
   void setDiskMenuOpen(bool open) {
     if (_diskMenuOpen == open) return;
     _diskMenuOpen = open;
+    if (open) _settingsMenuOpen = false;
     notifyListeners();
+  }
+
+  void setSettingsMenuOpen(bool open) {
+    if (_settingsMenuOpen == open) return;
+    _settingsMenuOpen = open;
+    if (open) _diskMenuOpen = false;
+    notifyListeners();
+  }
+
+  Future<void> setPruneBelowBytes(int bytes) async {
+    if (_pruneBelowBytes == bytes) return;
+    _pruneBelowBytes = bytes;
+    _settingsMenuOpen = false;
+    notifyListeners();
+    if (backend.supportsSystemActions) {
+      await rescan();
+    }
   }
 
   void _safeNotify() {
@@ -165,7 +188,13 @@ class StrataController extends ChangeNotifier {
     final completer = Completer<void>();
     var hadLiveMap = false;
 
-    _scanSub = backend.watchScanPath(rootPath, volume: volume).listen(
+    _scanSub = backend
+        .watchScanPath(
+          rootPath,
+          volume: volume,
+          pruneBelowBytes: _pruneBelowBytes,
+        )
+        .listen(
       (update) {
         if (_disposed) return;
         _scanEntries = update.entryCount;
@@ -518,10 +547,12 @@ class StrataRootView extends StatefulWidget {
     super.key,
     this.controller,
     this.backend = const SampleDiskBackend(),
+    this.enableWindowChrome = false,
   });
 
   final StrataController? controller;
   final DiskBackend backend;
+  final bool enableWindowChrome;
 
   @override
   State<StrataRootView> createState() => _StrataRootViewState();
@@ -564,69 +595,80 @@ class _StrataRootViewState extends State<StrataRootView> {
                   color: theme.text.color,
                   fontFamily: 'Segoe UI',
                 ),
-                child: switch (_controller.phase) {
-                  CatalogPhase.loading => StrataLoadingView(
-                      theme: theme,
-                      volume: _controller.selectedVolume,
-                      entryCount: _controller.scanEntries,
-                      scannedBytes: _controller.scanBytes,
-                      themeDots: _ThemeDots(controller: _controller),
-                    ),
-                  CatalogPhase.error => Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            '无法读取磁盘内容',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              color: theme.text.color,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          ConstrainedBox(
-                            constraints: const BoxConstraints(maxWidth: 420),
-                            child: Text(
-                              _controller.scanError ?? '未知错误',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: theme.secondaryText.color,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 18),
-                          MouseRegion(
-                            cursor: SystemMouseCursors.click,
-                            child: GestureDetector(
-                              onTap: _controller.rescan,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 18,
-                                  vertical: 8,
-                                ),
-                                decoration: BoxDecoration(
+                child: Stack(
+                  children: [
+                    if (widget.enableWindowChrome)
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 118,
+                        height: 54,
+                        child: DragToMoveArea(
+                          child: Container(color: Colors.transparent),
+                        ),
+                      ),
+                    switch (_controller.phase) {
+                      CatalogPhase.loading => StrataLoadingView(
+                          theme: theme,
+                          volume: _controller.selectedVolume,
+                          entryCount: _controller.scanEntries,
+                          scannedBytes: _controller.scanBytes,
+                          themeDots: _ThemeDots(controller: _controller),
+                          rightBarPadding: widget.enableWindowChrome ? 128 : 22,
+                        ),
+                      CatalogPhase.error => Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                '无法读取磁盘内容',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w600,
                                   color: theme.text.color,
-                                  borderRadius: BorderRadius.circular(999),
                                 ),
+                              ),
+                              const SizedBox(height: 8),
+                              ConstrainedBox(
+                                constraints: const BoxConstraints(maxWidth: 420),
                                 child: Text(
-                                  '重试',
+                                  _controller.scanError ?? '未知错误',
+                                  textAlign: TextAlign.center,
                                   style: TextStyle(
                                     fontSize: 13,
-                                    fontWeight: FontWeight.w500,
-                                    color: theme.background.color,
+                                    color: theme.secondaryText.color,
                                   ),
                                 ),
                               ),
-                            ),
+                              const SizedBox(height: 18),
+                              MouseRegion(
+                                cursor: SystemMouseCursors.click,
+                                child: GestureDetector(
+                                  onTap: _controller.rescan,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 18,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: theme.text.color,
+                                      borderRadius: BorderRadius.circular(999),
+                                    ),
+                                    child: Text(
+                                      '重试',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w500,
+                                        color: theme.background.color,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
-                  CatalogPhase.ready => Stack(
-                      children: [
-                        Row(
+                        ),
+                      CatalogPhase.ready => Row(
                           children: [
                             SizedBox(
                               width: 340,
@@ -639,26 +681,45 @@ class _StrataRootViewState extends State<StrataRootView> {
                               child: _MapArea(
                                 controller: _controller,
                                 catalog: _controller.catalog!,
+                                rightBarPadding:
+                                    widget.enableWindowChrome ? 128 : 22,
                               ),
                             ),
                           ],
                         ),
-                        if (_controller.diskMenuOpen) ...[
-                          Positioned.fill(
-                            child: GestureDetector(
-                              behavior: HitTestBehavior.translucent,
-                              onTap: () => _controller.setDiskMenuOpen(false),
-                            ),
-                          ),
-                          Positioned(
-                            left: 22,
-                            top: 78,
-                            child: _DiskPickerOverlay(controller: _controller),
-                          ),
-                        ],
-                      ],
-                    ),
-                },
+                    },
+                    if (widget.enableWindowChrome)
+                      Positioned(
+                        top: 0,
+                        right: 0,
+                        height: 54,
+                        child: _WindowControls(theme: theme),
+                      ),
+                    if (_controller.diskMenuOpen ||
+                        _controller.settingsMenuOpen)
+                      Positioned.fill(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onTap: () {
+                            _controller.setDiskMenuOpen(false);
+                            _controller.setSettingsMenuOpen(false);
+                          },
+                        ),
+                      ),
+                    if (_controller.diskMenuOpen)
+                      Positioned(
+                        left: 22,
+                        top: 78,
+                        child: _DiskPickerOverlay(controller: _controller),
+                      ),
+                    if (_controller.settingsMenuOpen)
+                      Positioned(
+                        right: widget.enableWindowChrome ? 120 : 16,
+                        top: 48,
+                        child: _SettingsOverlay(controller: _controller),
+                      ),
+                  ],
+                ),
               ),
             );
           },
@@ -1113,10 +1174,15 @@ class _Figure extends StatelessWidget {
 }
 
 class _MapArea extends StatelessWidget {
-  const _MapArea({required this.controller, required this.catalog});
+  const _MapArea({
+    required this.controller,
+    required this.catalog,
+    this.rightBarPadding = 22.0,
+  });
 
   final StrataController controller;
   final MapCatalog catalog;
+  final double rightBarPadding;
 
   @override
   Widget build(BuildContext context) {
@@ -1131,7 +1197,7 @@ class _MapArea extends StatelessWidget {
         SizedBox(
           height: 54,
           child: Padding(
-            padding: const EdgeInsets.only(left: 6, right: 22),
+            padding: EdgeInsets.only(left: 12, right: rightBarPadding),
             child: Row(
               children: [
                 if (parentName != null)
@@ -1142,8 +1208,10 @@ class _MapArea extends StatelessWidget {
                   ),
                 const Spacer(),
                 _ModeSwitch(controller: controller),
-                const SizedBox(width: 16),
+                const SizedBox(width: 14),
                 _ThemeDots(controller: controller),
+                const SizedBox(width: 12),
+                _GearButton(controller: controller),
               ],
             ),
           ),
@@ -1309,6 +1377,272 @@ class _ThemeDots extends StatelessWidget {
           if (t != StrataTheme.all.last) const SizedBox(width: 6),
         ],
       ],
+    );
+  }
+}
+
+class _GearButton extends StatefulWidget {
+  const _GearButton({required this.controller});
+
+  final StrataController controller;
+
+  @override
+  State<_GearButton> createState() => _GearButtonState();
+}
+
+class _GearButtonState extends State<_GearButton> {
+  bool _hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = widget.controller.theme;
+    final open = widget.controller.settingsMenuOpen;
+    final active = _hovering || open;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: GestureDetector(
+        onTap: () => widget.controller.setSettingsMenuOpen(!open),
+        child: Tooltip(
+          message: '设置',
+          child: SizedBox(
+            width: 26,
+            height: 26,
+            child: Center(
+              child: AnimatedRotation(
+                turns: active ? 40.0 / 360.0 : 0.0,
+                duration: const Duration(milliseconds: 280),
+                curve: Curves.easeOutBack,
+                child: Icon(
+                  Icons.settings_outlined,
+                  size: 16,
+                  color: active ? theme.text.color : theme.secondaryText.color,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SettingsOverlay extends StatelessWidget {
+  const _SettingsOverlay({required this.controller});
+
+  final StrataController controller;
+
+  static const _thresholds = [
+    (bytes: 512 * 1024, label: '精细 (512 KB)'),
+    (bytes: 1000000, label: '均衡 (1 MB)'),
+    (bytes: 5 * 1000000, label: '极速 (5 MB)'),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = controller.theme;
+    return Container(
+      width: 248,
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: theme.background.lighter(theme.isDark ? 0.06 : 0.035).color,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: theme.line.color.withValues(alpha: 0.16)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: theme.isDark ? 0.4 : 0.14),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 6, 10, 4),
+            child: Text(
+              '小文件聚合阈值',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+                color: theme.secondaryText.color,
+              ),
+            ),
+          ),
+          for (final item in _thresholds)
+            _SettingsRow(
+              label: item.label,
+              isCurrent: controller.pruneBelowBytes == item.bytes,
+              theme: theme,
+              onTap: () => controller.setPruneBelowBytes(item.bytes),
+            ),
+          Container(
+            height: 1,
+            margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 10),
+            color: theme.line.color.withValues(alpha: 0.12),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 6, 10, 6),
+            child: Text(
+              'Strata Flutter · 基于 Glimmer-X/Strata',
+              style: TextStyle(
+                fontSize: 11.5,
+                color: theme.secondaryText.color,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettingsRow extends StatefulWidget {
+  const _SettingsRow({
+    required this.label,
+    required this.isCurrent,
+    required this.theme,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool isCurrent;
+  final StrataTheme theme;
+  final VoidCallback onTap;
+
+  @override
+  State<_SettingsRow> createState() => _SettingsRowState();
+}
+
+class _SettingsRowState extends State<_SettingsRow> {
+  bool _hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = widget.theme;
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: theme.line.color.withValues(alpha: _hovering ? 0.09 : 0.0),
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 14,
+                child: widget.isCurrent
+                    ? Icon(Icons.check, size: 13, color: theme.text.color)
+                    : null,
+              ),
+              const SizedBox(width: 6),
+              Text(widget.label, style: const TextStyle(fontSize: 13)),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _WindowControls extends StatelessWidget {
+  const _WindowControls({required this.theme});
+
+  final StrataTheme theme;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _WindowButton(
+          icon: Icons.remove,
+          theme: theme,
+          isClose: false,
+          onTap: () => WindowManager.instance.getCurrent()?.minimize(),
+        ),
+        _WindowButton(
+          icon: Icons.crop_square,
+          iconSize: 14,
+          theme: theme,
+          isClose: false,
+          onTap: () {
+            final win = WindowManager.instance.getCurrent();
+            if (win == null) return;
+            if (win.isMaximized) {
+              win.unmaximize();
+            } else {
+              win.maximize();
+            }
+          },
+        ),
+        _WindowButton(
+          icon: Icons.close,
+          theme: theme,
+          isClose: true,
+          onTap: () => WindowManager.instance.getCurrent()?.close(),
+        ),
+      ],
+    );
+  }
+}
+
+class _WindowButton extends StatefulWidget {
+  const _WindowButton({
+    required this.icon,
+    required this.theme,
+    required this.isClose,
+    required this.onTap,
+    this.iconSize = 16,
+  });
+
+  final IconData icon;
+  final StrataTheme theme;
+  final bool isClose;
+  final VoidCallback onTap;
+  final double iconSize;
+
+  @override
+  State<_WindowButton> createState() => _WindowButtonState();
+}
+
+class _WindowButtonState extends State<_WindowButton> {
+  bool _hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = _hovering
+        ? (widget.isClose
+            ? const Color(0xFFD94A4A)
+            : widget.theme.line.color.withValues(alpha: 0.1))
+        : Colors.transparent;
+    final fg = _hovering && widget.isClose
+        ? Colors.white
+        : (_hovering ? widget.theme.text.color : widget.theme.secondaryText.color);
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Container(
+          width: 38,
+          height: 54,
+          color: bg,
+          child: Center(
+            child: Icon(widget.icon, size: widget.iconSize, color: fg),
+          ),
+        ),
+      ),
     );
   }
 }

@@ -236,6 +236,7 @@ class StrataLoadingView extends StatelessWidget {
     required this.entryCount,
     required this.scannedBytes,
     required this.themeDots,
+    this.rightBarPadding = 22.0,
   });
 
   final StrataTheme theme;
@@ -243,6 +244,7 @@ class StrataLoadingView extends StatelessWidget {
   final int entryCount;
   final int scannedBytes;
   final Widget themeDots;
+  final double rightBarPadding;
 
   @override
   Widget build(BuildContext context) {
@@ -330,7 +332,7 @@ class StrataLoadingView extends StatelessWidget {
               SizedBox(
                 height: 54,
                 child: Padding(
-                  padding: const EdgeInsets.only(right: 22),
+                  padding: EdgeInsets.only(right: rightBarPadding),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [themeDots],
