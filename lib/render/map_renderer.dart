@@ -245,8 +245,14 @@ abstract final class MapRenderer {
   static void _drawBubbles(BubbleScene scene, MapFrame frame, Canvas canvas) {
     final theme = frame.theme;
     final transforms = <int, Float64List>{};
-    final fillPaint = Paint()..style = PaintingStyle.fill;
-    final strokePaint = Paint()..style = PaintingStyle.stroke;
+    final fillPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+    final strokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..isAntiAlias = true
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.round;
 
     // Draw resting bubbles first and hovered/lifting bubbles last so swollen
     // pebbles and their accent strokes always appear above neighbours.
@@ -450,8 +456,14 @@ abstract final class MapRenderer {
     double presence(int bar) =>
         family.isEmpty || family.contains(bar) ? 1.0 : 1.0 - 0.55 * strength;
 
-    final fillPaint = Paint()..style = PaintingStyle.fill;
-    final strokePaint = Paint()..style = PaintingStyle.stroke;
+    final fillPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+    final strokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..isAntiAlias = true
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.round;
 
     for (final ribbon in scene.ribbons) {
       final appear = _unit(

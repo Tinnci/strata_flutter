@@ -555,8 +555,14 @@ abstract final class _MorphRenderer {
       members.putIfAbsent(group[i], () => []).add(i);
     }
 
-    final fillPaint = Paint()..style = PaintingStyle.fill;
-    final strokePaint = Paint()..style = PaintingStyle.stroke;
+    final fillPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+    final strokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..isAntiAlias = true
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.round;
 
     void drawCell(int index, Canvas target, double groupAlpha) {
       final cell = cells[index];
@@ -688,8 +694,14 @@ abstract final class _MorphRenderer {
     double presence(int bar) =>
         family.isEmpty || family.contains(bar) ? 1.0 : 1.0 - 0.55 * strength;
 
-    final fillPaint = Paint()..style = PaintingStyle.fill;
-    final strokePaint = Paint()..style = PaintingStyle.stroke;
+    final fillPaint = Paint()
+      ..style = PaintingStyle.fill
+      ..isAntiAlias = true;
+    final strokePaint = Paint()
+      ..style = PaintingStyle.stroke
+      ..isAntiAlias = true
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.round;
 
     for (final ribbon in scene.ribbons) {
       final ribbonAlpha = math.min(alpha[ribbon.parent], alpha[ribbon.child]);

@@ -111,12 +111,46 @@ class BubbleScene {
 
     var standIn = -100;
 
-    Path toPath(Polygon poly) {
+    Path toSmoothPath(Polygon poly, {required double radius}) {
       final path = Path();
-      if (poly.isEmpty) return path;
-      path.moveTo(poly.first.dx, poly.first.dy);
-      for (var i = 1; i < poly.length; i++) {
-        path.lineTo(poly[i].dx, poly[i].dy);
+      if (poly.length < 3) return path;
+
+      var started = false;
+      for (var i = 0; i < poly.length; i++) {
+        final prev = poly[(i - 1 + poly.length) % poly.length];
+        final curr = poly[i];
+        final next = poly[(i + 1) % poly.length];
+
+        final dxIn = curr.dx - prev.dx;
+        final dyIn = curr.dy - prev.dy;
+        final lenIn = math.sqrt(dxIn * dxIn + dyIn * dyIn);
+
+        final dxOut = next.dx - curr.dx;
+        final dyOut = next.dy - curr.dy;
+        final lenOut = math.sqrt(dxOut * dxOut + dyOut * dyOut);
+
+        if (lenIn < 0.5 || lenOut < 0.5) {
+          if (!started) {
+            path.moveTo(curr.dx, curr.dy);
+            started = true;
+          } else {
+            path.lineTo(curr.dx, curr.dy);
+          }
+          continue;
+        }
+
+        final cutIn = math.min(lenIn * 0.42, radius) / lenIn;
+        final cutOut = math.min(lenOut * 0.42, radius) / lenOut;
+        final enter = Offset(curr.dx - dxIn * cutIn, curr.dy - dyIn * cutIn);
+        final exit = Offset(curr.dx + dxOut * cutOut, curr.dy + dyOut * cutOut);
+
+        if (!started) {
+          path.moveTo(enter.dx, enter.dy);
+          started = true;
+        } else {
+          path.lineTo(enter.dx, enter.dy);
+        }
+        path.quadraticBezierTo(curr.dx, curr.dy, exit.dx, exit.dy);
       }
       path.close();
       return path;
@@ -218,10 +252,8 @@ class BubbleScene {
       required Tone tone,
     }) {
       final style = _styles[level - 1];
-      final shape = Geometry.soften(
-        Geometry.inset(raw, style.gap / 2.0),
-        cap: style.corner,
-      );
+      final insetPoly = Geometry.inset(raw, style.gap / 2.0);
+      final shape = Geometry.soften(insetPoly, cap: style.corner);
       if (shape.length < 3 || Geometry.area(shape) <= 6.0) return null;
       final center = Geometry.centroid(shape);
       final cell = BubbleCell(
@@ -230,7 +262,7 @@ class BubbleScene {
         level: level,
         parent: parent,
         raw: raw,
-        outline: toPath(shape),
+        outline: toSmoothPath(insetPoly, radius: style.corner),
         dots: item.kind == MapItemKind.free
             ? dotField(Geometry.inset(shape, 9.0))
             : null,

@@ -1321,7 +1321,7 @@ class _MapCanvasState extends State<_MapCanvas>
     super.dispose();
   }
 
-  static const _mapOffset = Offset(6, 0);
+  static const _mapOffset = Offset(12, 10);
 
   @override
   Widget build(BuildContext context) {
@@ -1329,8 +1329,8 @@ class _MapCanvasState extends State<_MapCanvas>
       builder: (context, constraints) {
         final outerSize = Size(constraints.maxWidth, constraints.maxHeight);
         final mapSize = Size(
-          math.max(0.0, outerSize.width - 28.0),
-          math.max(0.0, outerSize.height - 22.0),
+          math.max(0.0, outerSize.width - 34.0),
+          math.max(0.0, outerSize.height - 32.0),
         );
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (mounted) widget.controller.setMapSize(mapSize);
@@ -1561,11 +1561,11 @@ class _StrataPainter extends CustomPainter {
     if (scene == null) return;
 
     canvas.save();
-    // Clip to the full outer canvas (which includes the 6px left and 22px
-    // right/bottom margins) so swollen pebbles/bars never get sliced off by
-    // the inner layout box or RepaintBoundary layer.
+    // Clip to the full outer canvas (which includes 12px left, 10px top, and
+    // 22px right/bottom margins) so swollen pebbles/bars never get sliced off
+    // on any edge by the inner layout box or RepaintBoundary layer.
     canvas.clipRect(Offset.zero & size);
-    canvas.translate(6, 0);
+    canvas.translate(12, 10);
 
     final motionState = controller.motion;
     final transition = motionState.transition;
@@ -1641,11 +1641,11 @@ class _HoverCardOverlay extends StatelessWidget {
         final x = (location.dx + 18 + width > bounds.width
                 ? location.dx - 18 - width
                 : location.dx + 18) +
-            6.0;
+            12.0;
         final y = math.min(
           math.max(location.dy + 14, 0.0),
           math.max(0.0, bounds.height - 86),
-        );
+        ) + 10.0;
         final theme = controller.theme;
         return Positioned(
           left: x,
