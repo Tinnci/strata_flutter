@@ -9,6 +9,7 @@ import '../model/file_tree.dart';
 import '../motion/motion_state.dart';
 import '../scene/map_scene.dart';
 import '../theme/theme.dart';
+import '../theme/typography.dart';
 
 class MapFrame {
   const MapFrame({
@@ -114,6 +115,8 @@ void _drawLabel(
 ) {
   if (label == null || opacity <= 0.02) return;
   final effectiveColor = ink.withValues(alpha: ink.a * opacity);
+  final fontFamily = StrataTypography.primaryFontFamily;
+  final fontFallback = StrataTypography.fallbackFor(null);
 
   final namePainter = TextPainter(
     text: TextSpan(
@@ -122,6 +125,8 @@ void _drawLabel(
         color: effectiveColor,
         fontSize: label.fontSize,
         fontWeight: FontWeight.w600,
+        fontFamily: fontFamily,
+        fontFamilyFallback: fontFallback,
       ),
     ),
     textDirection: TextDirection.ltr,
@@ -143,6 +148,8 @@ void _drawLabel(
         style: TextStyle(
           color: effectiveColor.withValues(alpha: effectiveColor.a * 0.78),
           fontSize: label.fontSize - 1.0,
+          fontFamily: fontFamily,
+          fontFamilyFallback: fontFallback,
         ),
       ),
       textDirection: TextDirection.ltr,

@@ -13,6 +13,7 @@ import '../motion/motion_state.dart';
 import '../render/map_renderer.dart';
 import '../scene/map_scene.dart';
 import '../theme/theme.dart';
+import '../theme/typography.dart';
 import 'loading_pebbles.dart';
 
 class HoverInfo {
@@ -588,12 +589,14 @@ class _StrataRootViewState extends State<StrataRootView> {
           listenable: _controller,
           builder: (context, _) {
             final theme = _controller.theme;
+            final locale = Localizations.maybeLocaleOf(context);
             return Material(
               color: theme.background.color,
               child: DefaultTextStyle(
                 style: TextStyle(
                   color: theme.text.color,
-                  fontFamily: 'Segoe UI',
+                  fontFamily: StrataTypography.primaryFontFamily,
+                  fontFamilyFallback: StrataTypography.fallbackFor(locale),
                 ),
                 child: Stack(
                   children: [
