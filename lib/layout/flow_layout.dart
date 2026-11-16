@@ -138,12 +138,14 @@ abstract final class FlowLayout {
       final x = left + (node.span - node.width) / 2.0;
       final y = level * (rowHeight + between);
       if (level > deepest) deepest = level;
-      bars.add(FlowBar(
-        id: node.input.id,
-        parent: parent,
-        level: level,
-        rect: Rect.fromLTWH(x, y, node.width, rowHeight),
-      ));
+      bars.add(
+        FlowBar(
+          id: node.input.id,
+          parent: parent,
+          level: level,
+          rect: Rect.fromLTWH(x, y, node.width, rowHeight),
+        ),
+      );
       if (node.children.isEmpty) return;
 
       var childLeft = left + (node.span - node.inner) / 2.0;
@@ -151,16 +153,18 @@ abstract final class FlowLayout {
       for (final child in node.children) {
         place(child, childLeft, level + 1, node.input.id);
         final childX = childLeft + (child.span - child.width) / 2.0;
-        ribbons.add(FlowRibbon(
-          parent: node.input.id,
-          child: child.input.id,
-          topStart: anchor,
-          topEnd: anchor + child.width,
-          bottomStart: childX,
-          bottomEnd: childX + child.width,
-          topY: y + rowHeight,
-          bottomY: y + rowHeight + between,
-        ));
+        ribbons.add(
+          FlowRibbon(
+            parent: node.input.id,
+            child: child.input.id,
+            topStart: anchor,
+            topEnd: anchor + child.width,
+            bottomStart: childX,
+            bottomEnd: childX + child.width,
+            topY: y + rowHeight,
+            bottomY: y + rowHeight + between,
+          ),
+        );
         anchor += child.width;
         childLeft += child.span + spacing;
       }

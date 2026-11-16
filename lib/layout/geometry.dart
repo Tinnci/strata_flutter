@@ -87,10 +87,12 @@ abstract final class Geometry {
       final side = nx * current.dx + ny * current.dy - c;
       if ((side <= 0) != (previousSide <= 0)) {
         final t = previousSide / (previousSide - side);
-        result.add(Offset(
-          previous.dx + (current.dx - previous.dx) * t,
-          previous.dy + (current.dy - previous.dy) * t,
-        ));
+        result.add(
+          Offset(
+            previous.dx + (current.dx - previous.dx) * t,
+            previous.dy + (current.dy - previous.dy) * t,
+          ),
+        );
       }
       if (side <= 0) {
         result.add(current);
@@ -131,7 +133,11 @@ abstract final class Geometry {
   }
 
   /// A rounded rectangle as a polygon.
-  static Polygon roundedRect(Rect rect, {required double radius, int steps = 8}) {
+  static Polygon roundedRect(
+    Rect rect, {
+    required double radius,
+    int steps = 8,
+  }) {
     final r = math.min(radius, math.min(rect.width, rect.height) / 2.0);
     final corners = <(double, double, double)>[
       (rect.right - r, rect.top + r, -math.pi / 2.0),
@@ -150,7 +156,11 @@ abstract final class Geometry {
   }
 
   /// Rounds the corners of a polygon using Chaikin's scheme.
-  static Polygon soften(Polygon polygon, {required double cap, int passes = 3}) {
+  static Polygon soften(
+    Polygon polygon, {
+    required double cap,
+    int passes = 3,
+  }) {
     var current = polygon;
     var limit = cap;
     for (var pass = 0; pass < passes && current.length >= 3; pass++) {
@@ -190,7 +200,9 @@ abstract final class Geometry {
   }
 
   static (double, double)? verticalSpan(Polygon polygon, double x) {
-    final swapped = polygon.map((p) => Offset(p.dy, p.dx)).toList(growable: false);
+    final swapped = polygon
+        .map((p) => Offset(p.dy, p.dx))
+        .toList(growable: false);
     return horizontalSpan(swapped, x);
   }
 }

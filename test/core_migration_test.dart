@@ -22,7 +22,10 @@ void main() {
 
       final shrunk = Geometry.inset(poly, 5);
       expect(Geometry.area(shrunk), lessThan(Geometry.area(poly)));
-      expect(Geometry.soften(shrunk, cap: 8).length, greaterThan(shrunk.length));
+      expect(
+        Geometry.soften(shrunk, cap: 8).length,
+        greaterThan(shrunk.length),
+      );
     });
 
     test('squarify preserves total area', () {
@@ -36,12 +39,18 @@ void main() {
 
   group('BubbleLayout & FlowLayout', () {
     test('bubble layout converges within tolerance', () {
-      final region = Geometry.roundedRect(const Rect.fromLTWH(0, 0, 400, 300), radius: 24);
+      final region = Geometry.roundedRect(
+        const Rect.fromLTWH(0, 0, 400, 300),
+        radius: 24,
+      );
       final sizes = [500.0, 250.0, 150.0, 100.0];
       final cells = BubbleLayout.ordered(sizes: sizes, region: region);
       expect(cells.length, sizes.length);
 
-      final totalArea = cells.fold<double>(0, (sum, c) => sum + Geometry.area(c));
+      final totalArea = cells.fold<double>(
+        0,
+        (sum, c) => sum + Geometry.area(c),
+      );
       expect(totalArea, closeTo(Geometry.area(region), 1e-3));
       for (var i = 0; i < sizes.length; i++) {
         final share = Geometry.area(cells[i]) / totalArea;
@@ -55,10 +64,7 @@ void main() {
           FlowInput(
             id: 1,
             size: 100,
-            children: [
-              FlowInput(id: 2, size: 60),
-              FlowInput(id: 3, size: 40),
-            ],
+            children: [FlowInput(id: 2, size: 60), FlowInput(id: 3, size: 40)],
           ),
         ],
         width: 500,
@@ -72,7 +78,10 @@ void main() {
       final rootBar = result.bars.firstWhere((b) => b.id == 1);
       final child2 = result.bars.firstWhere((b) => b.id == 2);
       final child3 = result.bars.firstWhere((b) => b.id == 3);
-      expect(child2.rect.width + child3.rect.width, closeTo(rootBar.rect.width, 1e-6));
+      expect(
+        child2.rect.width + child3.rect.width,
+        closeTo(rootBar.rect.width, 1e-6),
+      );
     });
   });
 
@@ -102,12 +111,24 @@ void main() {
       final catalog = DemoDisk.catalog();
       final topItems = catalog.itemsIn(FileTree.root);
       final folder = topItems.firstWhere(
-        (it) => it.kind == MapItemKind.folder && catalog.childrenOfItem(it).length > 1,
+        (it) =>
+            it.kind == MapItemKind.folder &&
+            catalog.childrenOfItem(it).length > 1,
       );
       const size = Size(800, 600);
       for (final mode in MapMode.values) {
-        final outer = MapScene.build(mode, catalog: catalog, focus: FileTree.root, size: size);
-        final inner = MapScene.build(mode, catalog: catalog, focus: folder.id, size: size);
+        final outer = MapScene.build(
+          mode,
+          catalog: catalog,
+          focus: FileTree.root,
+          size: size,
+        );
+        final inner = MapScene.build(
+          mode,
+          catalog: catalog,
+          focus: folder.id,
+          size: size,
+        );
         final morph = Morph(
           outer: outer,
           inner: inner,

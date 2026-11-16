@@ -10,11 +10,7 @@ import '../theme/theme.dart';
 enum MapMode { bubbles, flow }
 
 class MarkLabel {
-  const MarkLabel({
-    required this.name,
-    this.size,
-    required this.fontSize,
-  });
+  const MarkLabel({required this.name, this.size, required this.fontSize});
 
   final String name;
   final String? size;
@@ -49,11 +45,7 @@ class BubbleCell {
 }
 
 class BubbleScene {
-  BubbleScene({
-    required this.cells,
-    required this.top,
-    required this.size,
-  });
+  BubbleScene({required this.cells, required this.top, required this.size});
 
   final List<BubbleCell> cells;
   final List<int> top;
@@ -61,17 +53,17 @@ class BubbleScene {
 
   List<int> hit(Offset point) {
     final first = top.cast<int?>().firstWhere(
-          (idx) => Geometry.contains(cells[idx!].raw, point),
-          orElse: () => null,
-        );
+      (idx) => Geometry.contains(cells[idx!].raw, point),
+      orElse: () => null,
+    );
     if (first == null) return const [];
     final chain = [first];
     while (true) {
       final current = cells[chain.last];
       final next = current.children.cast<int?>().firstWhere(
-            (idx) => Geometry.contains(cells[idx!].raw, point),
-            orElse: () => null,
-          );
+        (idx) => Geometry.contains(cells[idx!].raw, point),
+        orElse: () => null,
+      );
       if (next == null) break;
       chain.add(next);
     }
@@ -84,9 +76,9 @@ class BubbleScene {
       var current = idx;
       while (true) {
         final next = cells[current].children.cast<int?>().firstWhere(
-              (c) => ids.contains(cells[c!].item.id),
-              orElse: () => null,
-            );
+          (c) => ids.contains(cells[c!].item.id),
+          orElse: () => null,
+        );
         if (next == null) break;
         current = next;
       }
@@ -204,13 +196,15 @@ class BubbleScene {
         }
       }
       if (smallBytes > 0) {
-        kept.add(MapItem(
-          id: standIn--,
-          name: '',
-          size: smallBytes,
-          kind: MapItemKind.small,
-          count: smallCount,
-        ));
+        kept.add(
+          MapItem(
+            id: standIn--,
+            name: '',
+            size: smallBytes,
+            kind: MapItemKind.small,
+            count: smallCount,
+          ),
+        );
       }
       return kept;
     }
@@ -390,11 +384,7 @@ class FlowRibbonVisual {
 }
 
 class FlowScene {
-  FlowScene({
-    required this.bars,
-    required this.ribbons,
-    required this.size,
-  });
+  FlowScene({required this.bars, required this.ribbons, required this.size});
 
   static const double rowHeight = 36.0;
   static const double between = 28.0;
@@ -483,13 +473,15 @@ class FlowScene {
         }
       }
       if (smallBytes > 0) {
-        kept.add(MapItem(
-          id: standIn--,
-          name: '',
-          size: smallBytes,
-          kind: MapItemKind.small,
-          count: smallCount,
-        ));
+        kept.add(
+          MapItem(
+            id: standIn--,
+            name: '',
+            size: smallBytes,
+            kind: MapItemKind.small,
+            count: smallCount,
+          ),
+        );
       }
 
       final children = <FlowInput>[];
@@ -526,13 +518,15 @@ class FlowScene {
       }
     }
     if (smallBytes > 0) {
-      keptTop.add(MapItem(
-        id: standIn--,
-        name: '',
-        size: smallBytes,
-        kind: MapItemKind.small,
-        count: smallCount,
-      ));
+      keptTop.add(
+        MapItem(
+          id: standIn--,
+          name: '',
+          size: smallBytes,
+          kind: MapItemKind.small,
+          count: smallCount,
+        ),
+      );
     }
 
     var familySlot = 0;
@@ -596,16 +590,18 @@ class FlowScene {
             )
           : null;
 
-      bars.add(FlowBarVisual(
-        item: item,
-        key: keysByTempId[b.id]!,
-        level: b.level,
-        parent: b.parent != null ? tempToBarIndex[b.parent!] : null,
-        rect: rect,
-        tone: tonesByTempId[b.id]!,
-        dots: item.kind == MapItemKind.free ? freeDots(rect) : null,
-        label: label,
-      ));
+      bars.add(
+        FlowBarVisual(
+          item: item,
+          key: keysByTempId[b.id]!,
+          level: b.level,
+          parent: b.parent != null ? tempToBarIndex[b.parent!] : null,
+          rect: rect,
+          tone: tonesByTempId[b.id]!,
+          dots: item.kind == MapItemKind.free ? freeDots(rect) : null,
+          label: label,
+        ),
+      );
     }
 
     final ribbons = <FlowRibbonVisual>[];
@@ -621,8 +617,7 @@ class FlowScene {
         ..lineTo(r.topEnd, topY)
         ..cubicTo(r.topEnd, midY, r.bottomEnd, midY, r.bottomEnd, bottomY)
         ..lineTo(r.bottomStart, bottomY)
-        ..cubicTo(
-            r.bottomStart, midY, r.topStart, midY, r.topStart, topY)
+        ..cubicTo(r.bottomStart, midY, r.topStart, midY, r.topStart, topY)
         ..close();
       ribbons.add(FlowRibbonVisual(parent: pIdx, child: cIdx, path: path));
     }
@@ -633,14 +628,14 @@ class FlowScene {
 
 class MapScene {
   MapScene.bubbles(BubbleScene scene)
-      : mode = MapMode.bubbles,
-        bubbles = scene,
-        flow = null;
+    : mode = MapMode.bubbles,
+      bubbles = scene,
+      flow = null;
 
   MapScene.flow(FlowScene scene)
-      : mode = MapMode.flow,
-        bubbles = null,
-        flow = scene;
+    : mode = MapMode.flow,
+      bubbles = null,
+      flow = scene;
 
   final MapMode mode;
   final BubbleScene? bubbles;
@@ -654,11 +649,11 @@ class MapScene {
   }) {
     return switch (mode) {
       MapMode.bubbles => MapScene.bubbles(
-          BubbleScene.build(catalog: catalog, focus: focus, size: size),
-        ),
+        BubbleScene.build(catalog: catalog, focus: focus, size: size),
+      ),
       MapMode.flow => MapScene.flow(
-          FlowScene.build(catalog: catalog, focus: focus, size: size),
-        ),
+        FlowScene.build(catalog: catalog, focus: focus, size: size),
+      ),
     };
   }
 

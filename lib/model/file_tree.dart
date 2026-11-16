@@ -1,4 +1,7 @@
+import 'dart:io' show Platform;
 import 'dart:math' as math;
+
+import '../src/rust/api/scan.dart' as rust;
 
 enum NodeKind { directory, file, smallItems }
 
@@ -79,10 +82,10 @@ class MapItem {
       id >= 0 && (kind == MapItemKind.folder || kind == MapItemKind.file);
 
   String get title => switch (kind) {
-        MapItemKind.small => '$count 个小项',
-        MapItemKind.free => '可用',
-        _ => name,
-      };
+    MapItemKind.small => '$count 个小项',
+    MapItemKind.free => '可用',
+    _ => name,
+  };
 
   bool get isOutsideScan =>
       kind == MapItemKind.hidden ||
@@ -98,11 +101,7 @@ class Crumb {
 }
 
 class MapCatalog {
-  const MapCatalog({
-    required this.tree,
-    this.volume,
-    this.isLive = false,
-  });
+  const MapCatalog({required this.tree, this.volume, this.isLive = false});
 
   final FileTree tree;
   final VolumeInfo? volume;
@@ -122,24 +121,24 @@ class MapCatalog {
     final node = tree.nodes[index];
     return switch (node.kind) {
       NodeKind.directory => MapItem(
-          id: index,
-          name: node.name,
-          size: node.size,
-          kind: MapItemKind.folder,
-        ),
+        id: index,
+        name: node.name,
+        size: node.size,
+        kind: MapItemKind.folder,
+      ),
       NodeKind.file => MapItem(
-          id: index,
-          name: node.name,
-          size: node.size,
-          kind: MapItemKind.file,
-        ),
+        id: index,
+        name: node.name,
+        size: node.size,
+        kind: MapItemKind.file,
+      ),
       NodeKind.smallItems => MapItem(
-          id: index,
-          name: '',
-          size: node.size,
-          kind: MapItemKind.small,
-          count: node.itemCount,
-        ),
+        id: index,
+        name: '',
+        size: node.size,
+        kind: MapItemKind.small,
+        count: node.itemCount,
+      ),
     };
   }
 
@@ -199,20 +198,24 @@ class MapCatalog {
     }
 
     if (hiddenBytes > 0) {
-      items.add(MapItem(
-        id: MapItem.hiddenId,
-        name: isLive ? '还没扫到' : '系统与保留空间',
-        size: hiddenBytes,
-        kind: isLive ? MapItemKind.unscanned : MapItemKind.hidden,
-      ));
+      items.add(
+        MapItem(
+          id: MapItem.hiddenId,
+          name: isLive ? '还没扫到' : '系统与保留空间',
+          size: hiddenBytes,
+          kind: isLive ? MapItemKind.unscanned : MapItemKind.hidden,
+        ),
+      );
     }
     if (volume != null && volume!.availableBytes > 0) {
-      items.add(MapItem(
-        id: MapItem.freeId,
-        name: '',
-        size: volume!.availableBytes,
-        kind: MapItemKind.free,
-      ));
+      items.add(
+        MapItem(
+          id: MapItem.freeId,
+          name: '',
+          size: volume!.availableBytes,
+          kind: MapItemKind.free,
+        ),
+      );
     }
     return items;
   }
@@ -235,6 +238,65 @@ class MapCatalog {
       current = node.parent;
     }
     return chain.reversed.toList(growable: false);
+  }
+
+  /// Reconstructs the full filesystem path of `nodeId`.
+  String? pathOf(int nodeId) {
+    if (nodeId < 0 || nodeId >= tree.nodes.length) return null;
+    if (nodeId == FileTree.root) return tree.rootPath;
+
+    final segments = <String>[];
+    int? current = nodeId;
+    while (current != null && current != FileTree.root) {
+      final node = tree.nodes[current];
+      if (node.kind == NodeKind.smallItems) return null;
+      segments.add(node.name);
+      current = node.parent;
+    }
+    final sep = Platform.isWindows ? r'\' : '/';
+    var base = tree.rootPath;
+    if (base.endsWith(r'\') || base.endsWith('/')) {
+      base = base.substring(0, base.length - 1);
+    }
+    return '$base$sep${segments.reversed.join(sep)}';
+  }
+
+  static MapCatalog fromRust(
+    rust.ScanResultData data, {
+    rust.VolumeSummary? volume,
+  }) {
+    final nodes = data.nodes.map((n) {
+      final kind = n.isSmallGroup
+          ? NodeKind.smallItems
+          : (n.isDir ? NodeKind.directory : NodeKind.file);
+      return TreeNode(
+        id: n.id,
+        parent: n.parent,
+        name: n.name,
+        size: n.size.toInt(),
+        kind: kind,
+        itemCount: n.itemCount,
+        children: n.children.toList(growable: false),
+      );
+    }).toList(growable: false);
+
+    final tree = FileTree(
+      nodes: nodes,
+      rootPath: data.rootPath,
+      scannedAt: DateTime.now(),
+      entryCount: data.entryCount.toInt(),
+    );
+
+    return MapCatalog(
+      tree: tree,
+      volume: volume != null
+          ? VolumeInfo(
+              name: volume.name,
+              totalBytes: volume.totalBytes.toInt(),
+              availableBytes: volume.availableBytes.toInt(),
+            )
+          : null,
+    );
   }
 }
 

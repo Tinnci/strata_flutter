@@ -33,10 +33,10 @@ class ActiveTransition {
   final int? flowFocus;
 
   double get duration => switch (kind) {
-        MapTransitionKind.swap => SwapTiming.duration,
-        MapTransitionKind.morph => morph?.duration ?? 0.5,
-        _ => 0.0,
-      };
+    MapTransitionKind.swap => SwapTiming.duration,
+    MapTransitionKind.morph => morph?.duration ?? 0.5,
+    _ => 0.0,
+  };
 
   double progress(double nowSeconds) {
     final d = duration;

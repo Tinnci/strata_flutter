@@ -7,11 +7,16 @@ abstract final class Squarify {
   static List<Rect> rects(List<double> values, Rect rect) {
     final total = values.fold<double>(0.0, (a, b) => a + b);
     if (total <= 0 || rect.width <= 0 || rect.height <= 0) {
-      return List<Rect>.filled(values.length, Rect.fromLTWH(rect.left, rect.top, 0, 0));
+      return List<Rect>.filled(
+        values.length,
+        Rect.fromLTWH(rect.left, rect.top, 0, 0),
+      );
     }
 
     final scale = (rect.width * rect.height) / total;
-    final areas = values.map((v) => math.max(v * scale, 1e-9)).toList(growable: false);
+    final areas = values
+        .map((v) => math.max(v * scale, 1e-9))
+        .toList(growable: false);
 
     final result = List<Rect>.filled(values.length, Rect.zero);
     var remaining = rect;
@@ -24,7 +29,10 @@ abstract final class Squarify {
       var ratio = 0.0;
       for (final index in indices) {
         final length = areas[index] / thickness;
-        ratio = math.max(ratio, math.max(length / thickness, thickness / length));
+        ratio = math.max(
+          ratio,
+          math.max(length / thickness, thickness / length),
+        );
       }
       return ratio;
     }
@@ -38,8 +46,18 @@ abstract final class Squarify {
       for (final index in row) {
         final length = areas[index] / thickness;
         result[index] = horizontal
-            ? Rect.fromLTWH(remaining.left, remaining.top + offset, thickness, length)
-            : Rect.fromLTWH(remaining.left + offset, remaining.top, length, thickness);
+            ? Rect.fromLTWH(
+                remaining.left,
+                remaining.top + offset,
+                thickness,
+                length,
+              )
+            : Rect.fromLTWH(
+                remaining.left + offset,
+                remaining.top,
+                length,
+                thickness,
+              );
         offset += length;
       }
       if (horizontal) {
@@ -64,7 +82,8 @@ abstract final class Squarify {
     for (var i = 0; i < areas.length; i++) {
       final side = math.min(remaining.width, remaining.height);
       if (row.isNotEmpty &&
-          worst([...row, i], rowArea + areas[i], side) > worst(row, rowArea, side)) {
+          worst([...row, i], rowArea + areas[i], side) >
+              worst(row, rowArea, side)) {
         flush();
       }
       row.add(i);

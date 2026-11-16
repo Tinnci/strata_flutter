@@ -52,38 +52,69 @@ Rect _lerpRect(Rect a, Rect b, double t) {
 }
 
 Float64List _identity() {
-  return Float64List.fromList([
-    1, 0, 0, 0,
-    0, 1, 0, 0,
-    0, 0, 1, 0,
-    0, 0, 0, 1,
-  ]);
+  return Float64List.fromList([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
 }
 
 Float64List _translation(double tx, double ty) {
   return Float64List.fromList([
-    1, 0, 0, 0,
-    0, 1, 0, 0,
-    0, 0, 1, 0,
-    tx, ty, 0, 1,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    tx,
+    ty,
+    0,
+    1,
   ]);
 }
 
 Float64List _scale(double sx, double sy) {
   return Float64List.fromList([
-    sx, 0, 0, 0,
-    0, sy, 0, 0,
-    0, 0, 1, 0,
-    0, 0, 0, 1,
+    sx,
+    0,
+    0,
+    0,
+    0,
+    sy,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    0,
+    0,
+    0,
+    1,
   ]);
 }
 
 Float64List _scaleAbout(Offset point, double factor) {
   return Float64List.fromList([
-    factor, 0, 0, 0,
-    0, factor, 0, 0,
-    0, 0, 1, 0,
-    point.dx * (1.0 - factor), point.dy * (1.0 - factor), 0, 1,
+    factor,
+    0,
+    0,
+    0,
+    0,
+    factor,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    point.dx * (1.0 - factor),
+    point.dy * (1.0 - factor),
+    0,
+    1,
   ]);
 }
 
@@ -115,16 +146,30 @@ Float64List _invert2D(Float64List m) {
   final ntx = -(na * tx + nc * ty);
   final nty = -(nb * tx + nd * ty);
   return Float64List.fromList([
-    na, nb, 0, 0,
-    nc, nd, 0, 0,
-    0, 0, 1, 0,
-    ntx, nty, 0, 1,
+    na,
+    nb,
+    0,
+    0,
+    nc,
+    nd,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    ntx,
+    nty,
+    0,
+    1,
   ]);
 }
 
 Offset _applyPoint(Offset p, Float64List m) {
-  return Offset(m[0] * p.dx + m[4] * p.dy + m[12],
-      m[1] * p.dx + m[5] * p.dy + m[13]);
+  return Offset(
+    m[0] * p.dx + m[4] * p.dy + m[12],
+    m[1] * p.dx + m[5] * p.dy + m[13],
+  );
 }
 
 Rect _applyRect(Rect r, Float64List m) {
@@ -143,19 +188,17 @@ List<_MarkInfo> _extractMarks(MapScene scene) {
   switch (scene.mode) {
     case MapMode.bubbles:
       return scene.bubbles!.cells
-          .map((c) => _MarkInfo(
-                key: c.key,
-                parent: c.parent,
-                rect: c.outline.getBounds(),
-              ))
+          .map(
+            (c) => _MarkInfo(
+              key: c.key,
+              parent: c.parent,
+              rect: c.outline.getBounds(),
+            ),
+          )
           .toList(growable: false);
     case MapMode.flow:
       return scene.flow!.bars
-          .map((b) => _MarkInfo(
-                key: b.key,
-                parent: b.parent,
-                rect: b.rect,
-              ))
+          .map((b) => _MarkInfo(key: b.key, parent: b.parent, rect: b.rect))
           .toList(growable: false);
   }
 }
@@ -169,8 +212,8 @@ class Morph {
     required this.leavesOuter,
     required this.anchor,
     required this.bounds,
-  })  : _outerMarks = _extractMarks(outer),
-        _innerMarks = _extractMarks(inner) {
+  }) : _outerMarks = _extractMarks(outer),
+       _innerMarks = _extractMarks(inner) {
     bool isInside(int index) {
       if (anchor == null) return true;
       var current = _outerMarks[index].parent;
@@ -244,13 +287,15 @@ class Morph {
     final full = Offset.zero & bounds;
     switch (outer.mode) {
       case MapMode.bubbles:
-        final scaleFactor = math.pow(
-          math.min(
-            full.width / math.max(frame.width, 1.0),
-            full.height / math.max(frame.height, 1.0),
-          ),
-          q,
-        ).toDouble();
+        final scaleFactor = math
+            .pow(
+              math.min(
+                full.width / math.max(frame.width, 1.0),
+                full.height / math.max(frame.height, 1.0),
+              ),
+              q,
+            )
+            .toDouble();
         final center = frame.center;
         final fullCenter = full.center;
         return _then(
@@ -264,15 +309,13 @@ class Morph {
           ),
         );
       case MapMode.flow:
-        final scaleFactor =
-            math.pow(full.width / math.max(frame.width, 1.0), q).toDouble();
+        final scaleFactor = math
+            .pow(full.width / math.max(frame.width, 1.0), q)
+            .toDouble();
         final center = frame.center;
         final fullCenter = full.center;
         return _then(
-          _then(
-            _translation(-center.dx, 0.0),
-            _scale(scaleFactor, 1.0),
-          ),
+          _then(_translation(-center.dx, 0.0), _scale(scaleFactor, 1.0)),
           _translation(
             center.dx + (fullCenter.dx - center.dx) * q,
             _rowShift * q,
@@ -291,19 +334,25 @@ class Morph {
         final sc = source.center;
         final tc = target.center;
         return _then(
-          _then(
-            _translation(-sc.dx, -sc.dy),
-            _scale(scaleFactor, scaleFactor),
-          ),
+          _then(_translation(-sc.dx, -sc.dy), _scale(scaleFactor, scaleFactor)),
           _translation(tc.dx, tc.dy),
         );
       case MapMode.flow:
         final sx = target.width / math.max(source.width, 0.5);
         final sy = target.height / math.max(source.height, 0.5);
         return Float64List.fromList([
-          sx, 0, 0, 0,
-          0, sy, 0, 0,
-          0, 0, 1, 0,
+          sx,
+          0,
+          0,
+          0,
+          0,
+          sy,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
           target.left - source.left * sx,
           target.top - source.top * sy,
           0,
@@ -318,9 +367,9 @@ class Morph {
     final mark = _outerMarks[index].rect;
     final reach =
         math.sqrt(bounds.width * bounds.width + bounds.height * bounds.height) *
-            0.5 *
-            q *
-            q;
+        0.5 *
+        q *
+        q;
     switch (outer.mode) {
       case MapMode.bubbles:
         final a = _applyPoint(from.center, view);
@@ -330,7 +379,10 @@ class Morph {
         final length = math.max(math.sqrt(dx * dx + dy * dy), 1.0);
         return _translation(dx / length * reach, dy / length * reach);
       case MapMode.flow:
-        return _translation(mark.center.dx < from.center.dx ? -reach : reach, 0);
+        return _translation(
+          mark.center.dx < from.center.dx ? -reach : reach,
+          0,
+        );
     }
   }
 
@@ -385,7 +437,9 @@ class Morph {
         innerAlpha.add(innerAlpha[p]);
         innerOwn.add(false);
       } else {
-        innerPlace.add(_then(_scaleAbout(mark.rect.center, 0.7 + 0.3 * q), innerView));
+        innerPlace.add(
+          _then(_scaleAbout(mark.rect.center, 0.7 + 0.3 * q), innerView),
+        );
         innerAlpha.add(_smooth(0.35, 0.9, q));
         innerOwn.add(true);
       }
@@ -536,8 +590,10 @@ abstract final class _MorphRenderer {
           return;
         }
       } else {
-        fillPaint.color =
-            theme.wall(cell.tone).color.withValues(alpha: groupAlpha);
+        fillPaint.color = theme
+            .wall(cell.tone)
+            .color
+            .withValues(alpha: groupAlpha);
         target.drawPath(shape, fillPaint);
       }
       if (raised > 0.02 && (cell.children.isEmpty || cell.level > 1)) {
@@ -558,9 +614,14 @@ abstract final class _MorphRenderer {
           drawCell(mark, canvas, opacity);
         }
       } else {
-        final bounds = _applyRect(cells[i].outline.getBounds(), transforms[i])
-            .inflate(12);
-        canvas.saveLayer(bounds, Paint()..color = Color.fromRGBO(0, 0, 0, opacity));
+        final bounds = _applyRect(
+          cells[i].outline.getBounds(),
+          transforms[i],
+        ).inflate(12);
+        canvas.saveLayer(
+          bounds,
+          Paint()..color = Color.fromRGBO(0, 0, 0, opacity),
+        );
         for (final mark in marks) {
           drawCell(mark, canvas, 1.0);
         }
@@ -576,13 +637,23 @@ abstract final class _MorphRenderer {
       final at = _applyPoint(cell.center, transforms[index]);
       if (cell.item.kind == MapItemKind.free) {
         MapRenderer.drawTextLabel(
-            canvas, cell.label, at, theme.text.color, opacity);
+          canvas,
+          cell.label,
+          at,
+          theme.text.color,
+          opacity,
+        );
         continue;
       }
       if (cell.item.kind == MapItemKind.hidden ||
           cell.item.kind == MapItemKind.unscanned) {
         MapRenderer.drawTextLabel(
-            canvas, cell.label, at, theme.secondaryText.color, opacity);
+          canvas,
+          cell.label,
+          at,
+          theme.secondaryText.color,
+          opacity,
+        );
         continue;
       }
       final raised = _unit(lift(index));
@@ -629,7 +700,8 @@ abstract final class _MorphRenderer {
           : theme.fill(tone);
       final related =
           family.contains(ribbon.parent) && family.contains(ribbon.child);
-      final opacity = (0.4 + (related ? 0.3 * strength : 0.0)) *
+      final opacity =
+          (0.4 + (related ? 0.3 * strength : 0.0)) *
           math.min(presence(ribbon.parent), presence(ribbon.child)) *
           ribbonAlpha;
       fillPaint.color = color.color.withValues(alpha: opacity);
@@ -643,9 +715,18 @@ abstract final class _MorphRenderer {
       final raised = _unit(lift(i));
       final center = bar.rect.center;
       final localLift = Float64List.fromList([
-        1.0 + 0.012 * lift(i), 0, 0, 0,
-        0, 1.0 + 0.07 * lift(i), 0, 0,
-        0, 0, 1, 0,
+        1.0 + 0.012 * lift(i),
+        0,
+        0,
+        0,
+        0,
+        1.0 + 0.07 * lift(i),
+        0,
+        0,
+        0,
+        0,
+        1,
+        0,
         center.dx * (-0.012 * lift(i)),
         center.dy * (-0.07 * lift(i)),
         0,
@@ -681,18 +762,20 @@ abstract final class _MorphRenderer {
         }
       } else {
         final fill = theme.fill(bar.tone);
-        fillPaint.color =
-            fill.lighter(0.03 * raised).color.withValues(alpha: layerAlpha);
+        fillPaint.color = fill
+            .lighter(0.03 * raised)
+            .color
+            .withValues(alpha: layerAlpha);
         canvas.drawPath(shape, fillPaint);
         if (raised > 0.02) {
           strokePaint
             ..strokeWidth = 1.5
-            ..color =
-                theme.accent.color.withValues(alpha: raised * layerAlpha);
+            ..color = theme.accent.color.withValues(alpha: raised * layerAlpha);
           canvas.drawPath(shape, strokePaint);
         }
         if (labels > 0.01) {
-          final ink = (bar.item.kind == MapItemKind.hidden ||
+          final ink =
+              (bar.item.kind == MapItemKind.hidden ||
                   bar.item.kind == MapItemKind.unscanned)
               ? theme.secondaryText
               : theme.ink(fill);

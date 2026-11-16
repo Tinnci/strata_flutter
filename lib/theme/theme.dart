@@ -1,5 +1,6 @@
 import 'dart:math' as math;
-import 'package:flutter/material.dart';
+
+import 'package:material_ui/material_ui.dart';
 
 /// A colour in OKLCH: lightness 0...1, chroma, hue in degrees.
 /// Working in this space keeps steps of lightness even to the eye, which is what
@@ -65,14 +66,18 @@ class Tone {
     this.chroma = 1.0,
   });
 
-  const Tone.family(int index, {double lightness = 0, double hue = 0, double chroma = 1})
-      : this(
-          role: ToneRole.family,
-          familyIndex: index,
-          lightness: lightness,
-          hue: hue,
-          chroma: chroma,
-        );
+  const Tone.family(
+    int index, {
+    double lightness = 0,
+    double hue = 0,
+    double chroma = 1,
+  }) : this(
+         role: ToneRole.family,
+         familyIndex: index,
+         lightness: lightness,
+         hue: hue,
+         chroma: chroma,
+       );
 
   const Tone.neutral() : this(role: ToneRole.neutral);
   const Tone.hidden() : this(role: ToneRole.hidden);
@@ -151,11 +156,7 @@ class StrataTheme {
   /// The colour of a folder's own body, seen as the thin wall between cells.
   OKColor wall(Tone tone) {
     final base = fill(tone);
-    return OKColor(
-      base.l + (isDark ? -0.075 : -0.07),
-      base.c * 0.9,
-      base.h,
-    );
+    return OKColor(base.l + (isDark ? -0.075 : -0.07), base.c * 0.9, base.h);
   }
 
   /// Text colour that reads on a fill.

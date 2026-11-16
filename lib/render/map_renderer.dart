@@ -2,7 +2,8 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui';
 
-import 'package:flutter/material.dart' show FontWeight, TextPainter, TextSpan, TextStyle, TextDirection;
+import 'package:material_ui/material_ui.dart'
+    show FontWeight, TextPainter, TextSpan, TextStyle, TextDirection;
 
 import '../model/file_tree.dart';
 import '../motion/motion_state.dart';
@@ -41,10 +42,22 @@ Float64List _scaleAbout(Offset point, double factor) {
   final tx = point.dx * (1.0 - factor);
   final ty = point.dy * (1.0 - factor);
   return Float64List.fromList([
-    factor, 0, 0, 0,
-    0, factor, 0, 0,
-    0, 0, 1, 0,
-    tx, ty, 0, 1,
+    factor,
+    0,
+    0,
+    0,
+    0,
+    factor,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    tx,
+    ty,
+    0,
+    1,
   ]);
 }
 
@@ -52,15 +65,30 @@ Float64List _scaleXYAbout(Offset point, double sx, double sy) {
   final tx = point.dx * (1.0 - sx);
   final ty = point.dy * (1.0 - sy);
   return Float64List.fromList([
-    sx, 0, 0, 0,
-    0, sy, 0, 0,
-    0, 0, 1, 0,
-    tx, ty, 0, 1,
+    sx,
+    0,
+    0,
+    0,
+    0,
+    sy,
+    0,
+    0,
+    0,
+    0,
+    1,
+    0,
+    tx,
+    ty,
+    0,
+    1,
   ]);
 }
 
 Offset _transformPoint(Offset p, Float64List m) {
-  return Offset(m[0] * p.dx + m[4] * p.dy + m[12], m[1] * p.dx + m[5] * p.dy + m[13]);
+  return Offset(
+    m[0] * p.dx + m[4] * p.dy + m[12],
+    m[1] * p.dx + m[5] * p.dy + m[13],
+  );
 }
 
 Float64List _concat(Float64List a, Float64List b) {
@@ -182,8 +210,7 @@ abstract final class MapRenderer {
     Offset point,
     Color ink,
     double opacity,
-  ) =>
-      _drawLabel(canvas, label, point, ink, opacity);
+  ) => _drawLabel(canvas, label, point, ink, opacity);
 
   static void drawFreePath(
     Canvas canvas,
@@ -192,8 +219,7 @@ abstract final class MapRenderer {
     Float64List transform,
     StrataTheme theme,
     double opacity,
-  ) =>
-      _drawFree(canvas, shape, dots, transform, theme, opacity);
+  ) => _drawFree(canvas, shape, dots, transform, theme, opacity);
 
   static void drawDashed(Canvas canvas, Path path, Paint paint) =>
       _drawDashedPath(canvas, path, paint);
@@ -230,7 +256,8 @@ abstract final class MapRenderer {
 
       final lift = frame.lift(index);
       final scaleFactor =
-          (frame.smallest + (1.0 - frame.smallest) * appear) * (1.0 + 0.02 * lift);
+          (frame.smallest + (1.0 - frame.smallest) * appear) *
+          (1.0 + 0.02 * lift);
       final outer = _scaleAbout(cell.center, scaleFactor);
       transforms[index] = outer;
       final layerAlpha = _unit(appear * frame.solidity);
@@ -258,14 +285,18 @@ abstract final class MapRenderer {
         } else if (lift > 0.02) {
           strokePaint
             ..strokeWidth = 1.5
-            ..color =
-                theme.accent.color.withValues(alpha: _unit(lift) * layerAlpha);
+            ..color = theme.accent.color.withValues(
+              alpha: _unit(lift) * layerAlpha,
+            );
           canvas.drawPath(path, strokePaint);
         }
         continue;
       }
 
-      fillPaint.color = theme.wall(cell.tone).color.withValues(alpha: layerAlpha);
+      fillPaint.color = theme
+          .wall(cell.tone)
+          .color
+          .withValues(alpha: layerAlpha);
       canvas.drawPath(cell.outline.transform(outer), fillPaint);
 
       for (final childIndex in cell.children) {
@@ -288,20 +319,25 @@ abstract final class MapRenderer {
 
         for (final grandIndex in child.children) {
           final grand = scene.cells[grandIndex];
-          final innerLocal =
-              _scaleAbout(grand.center, 1.0 - 0.07 * _unit(childLift));
+          final innerLocal = _scaleAbout(
+            grand.center,
+            1.0 - 0.07 * _unit(childLift),
+          );
           final inner = _concat(middle, innerLocal);
           transforms[grandIndex] = inner;
-          fillPaint.color =
-              theme.fill(grand.tone).color.withValues(alpha: layerAlpha);
+          fillPaint.color = theme
+              .fill(grand.tone)
+              .color
+              .withValues(alpha: layerAlpha);
           canvas.drawPath(grand.outline.transform(inner), fillPaint);
         }
 
         if (childLift > 0.02) {
           strokePaint
             ..strokeWidth = 1.5
-            ..color = theme.accent.color
-                .withValues(alpha: _unit(childLift) * layerAlpha);
+            ..color = theme.accent.color.withValues(
+              alpha: _unit(childLift) * layerAlpha,
+            );
           canvas.drawPath(childPath, strokePaint);
         }
       }
@@ -324,7 +360,12 @@ abstract final class MapRenderer {
       if (cell.item.kind == MapItemKind.hidden ||
           cell.item.kind == MapItemKind.unscanned) {
         _drawLabel(
-            canvas, cell.label, at, theme.secondaryText.color, layerAlpha);
+          canvas,
+          cell.label,
+          at,
+          theme.secondaryText.color,
+          layerAlpha,
+        );
         continue;
       }
 
@@ -348,8 +389,9 @@ abstract final class MapRenderer {
         if (middle == null) continue;
         final child = scene.cells[childIndex];
         final childLift = _unit(frame.lift(childIndex));
-        final showsInside =
-            child.children.any((g) => scene.cells[g].label != null);
+        final showsInside = child.children.any(
+          (g) => scene.cells[g].label != null,
+        );
         _drawLabel(
           canvas,
           child.label,
@@ -402,7 +444,8 @@ abstract final class MapRenderer {
           : theme.fill(tone);
       final related =
           family.contains(ribbon.parent) && family.contains(ribbon.child);
-      final opacity = (0.4 + (related ? 0.3 * strength : 0.0)) *
+      final opacity =
+          (0.4 + (related ? 0.3 * strength : 0.0)) *
           math.min(presence(ribbon.parent), presence(ribbon.child));
       fillPaint.color = color.color.withValues(alpha: opacity * appear);
       canvas.drawPath(ribbon.path, fillPaint);
@@ -435,15 +478,18 @@ abstract final class MapRenderer {
         _drawLabel(canvas, bar.label, center, theme.text.color, layerAlpha);
       } else {
         final fill = theme.fill(bar.tone);
-        fillPaint.color =
-            fill.lighter(0.03 * _unit(lift)).color.withValues(alpha: layerAlpha);
+        fillPaint.color = fill
+            .lighter(0.03 * _unit(lift))
+            .color
+            .withValues(alpha: layerAlpha);
         canvas.drawPath(shape, fillPaint);
 
         if (lift > 0.02) {
           strokePaint
             ..strokeWidth = 1.5
-            ..color =
-                theme.accent.color.withValues(alpha: _unit(lift) * layerAlpha);
+            ..color = theme.accent.color.withValues(
+              alpha: _unit(lift) * layerAlpha,
+            );
           canvas.drawPath(shape, strokePaint);
         }
         if (bar.item.kind == MapItemKind.hidden ||
@@ -453,7 +499,8 @@ abstract final class MapRenderer {
             ..color = theme.line.color.withValues(alpha: 0.28 * layerAlpha);
           _drawDashedPath(canvas, shape, strokePaint);
         }
-        final ink = (bar.item.kind == MapItemKind.hidden ||
+        final ink =
+            (bar.item.kind == MapItemKind.hidden ||
                 bar.item.kind == MapItemKind.unscanned)
             ? theme.secondaryText
             : theme.ink(fill);

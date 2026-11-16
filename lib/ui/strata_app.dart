@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
@@ -9,6 +9,7 @@ import '../motion/morph.dart';
 import '../motion/motion_state.dart';
 import '../render/map_renderer.dart';
 import '../scene/map_scene.dart';
+import '../src/rust/api/scan.dart' as rust;
 import '../theme/theme.dart';
 
 class HoverInfo {
@@ -33,11 +34,20 @@ class PointerState {
 }
 
 class StrataController extends ChangeNotifier {
-  StrataController() {
+  StrataController({this.enableRust = false}) {
     catalog = DemoDisk.catalog();
+    if (enableRust) {
+      Future.microtask(initRust);
+    }
   }
 
+  final bool enableRust;
   late MapCatalog catalog;
+  List<rust.VolumeSummary> _volumes = const [];
+  rust.VolumeSummary? _selectedVolume;
+  bool _scanning = false;
+  bool _diskMenuOpen = false;
+  String? _scanError;
   StrataTheme _theme = StrataTheme.abyss;
   MapMode _mode = MapMode.bubbles;
   int _focus = FileTree.root;
@@ -47,8 +57,9 @@ class StrataController extends ChangeNotifier {
   int? _flowFocus;
 
   final MotionState motion = MotionState();
-  final ValueNotifier<PointerState> pointer =
-      ValueNotifier<PointerState>(const PointerState());
+  final ValueNotifier<PointerState> pointer = ValueNotifier<PointerState>(
+    const PointerState(),
+  );
   final ValueNotifier<int> canvasTick = ValueNotifier<int>(0);
   VoidCallback? onRequestAnimate;
 
@@ -59,6 +70,114 @@ class StrataController extends ChangeNotifier {
   int? get highlighted => _highlighted;
   int? get flowFocus => _flowFocus;
   Size get mapSize => _mapSize;
+  List<rust.VolumeSummary> get volumes => _volumes;
+  rust.VolumeSummary? get selectedVolume => _selectedVolume;
+  bool get scanning => _scanning;
+  bool get diskMenuOpen => _diskMenuOpen;
+  String? get scanError => _scanError;
+
+  void setDiskMenuOpen(bool open) {
+    if (_diskMenuOpen == open) return;
+    _diskMenuOpen = open;
+    notifyListeners();
+  }
+
+  Future<void> initRust() async {
+    try {
+      _volumes = rust.listVolumes();
+      if (_volumes.isNotEmpty) {
+        final preferred = _volumes.firstWhere(
+          (v) => v.isSystemDrive,
+          orElse: () => _volumes.first,
+        );
+        await selectVolume(preferred);
+      }
+    } catch (e) {
+      _scanError = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> selectVolume(rust.VolumeSummary volume) async {
+    _diskMenuOpen = false;
+    _selectedVolume = volume;
+    await scanPath(volume.mountPoint, volume: volume);
+  }
+
+  Future<void> rescan() async {
+    final v = _selectedVolume;
+    if (v != null) {
+      await scanPath(v.mountPoint, volume: v);
+    } else if (enableRust) {
+      await initRust();
+    }
+  }
+
+  Future<void> scanPath(
+    String rootPath, {
+    rust.VolumeSummary? volume,
+  }) async {
+    if (!enableRust || _scanning) return;
+    _scanning = true;
+    _scanError = null;
+    notifyListeners();
+
+    try {
+      final result = await rust.scanDirectory(
+        rootPath: rootPath,
+        pruneBelowBytes: BigInt.from(1000000),
+      );
+      catalog = MapCatalog.fromRust(result, volume: volume);
+      _focus = FileTree.root;
+      _highlighted = null;
+      _flowFocus = null;
+      pointer.value = const PointerState();
+      _rebuild(MapTransitionKind.swap);
+    } catch (e) {
+      _scanError = e.toString();
+    } finally {
+      _scanning = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> revealItem(MapItem item) async {
+    if (!enableRust || !item.isEntry) return;
+    final path = catalog.pathOf(item.id);
+    if (path == null) return;
+    try {
+      await rust.revealInExplorer(path: path);
+    } catch (e) {
+      _scanError = e.toString();
+      notifyListeners();
+    }
+  }
+
+  Future<void> trashItem(MapItem item) async {
+    if (!enableRust || !item.isEntry) return;
+    final path = catalog.pathOf(item.id);
+    if (path == null) return;
+    try {
+      await rust.moveToTrash(path: path);
+      await rescan();
+    } catch (e) {
+      _scanError = e.toString();
+      notifyListeners();
+    }
+  }
+
+  MapItem? hitItemAt(Offset location) {
+    final s = _scene;
+    if (s == null) return null;
+    switch (s.mode) {
+      case MapMode.bubbles:
+        final chain = s.bubbles!.hit(location);
+        return chain.isNotEmpty ? s.bubbles!.cells[chain.last].item : null;
+      case MapMode.flow:
+        final idx = s.flow!.hit(location);
+        return idx != null ? s.flow!.bars[idx].item : null;
+    }
+  }
 
   set theme(StrataTheme value) {
     if (_theme.id == value.id) return;
@@ -94,7 +213,9 @@ class StrataController extends ChangeNotifier {
     _flowFocus = null;
     pointer.value = const PointerState();
 
-    if (previousScene == null || _mapSize.width <= 80 || _mapSize.height <= 80) {
+    if (previousScene == null ||
+        _mapSize.width <= 80 ||
+        _mapSize.height <= 80) {
       _rebuild(MapTransitionKind.swap);
       notifyListeners();
       return;
@@ -258,8 +379,7 @@ class StrataController extends ChangeNotifier {
     final total = math.max(catalog.totalBytes, 1);
     final share = Format.percent(item.size / total);
     final detail = switch (item.kind) {
-      MapItemKind.folder =>
-        '${catalog.childrenOfItem(item).length} 个子项 · 点击进入',
+      MapItemKind.folder => '${catalog.childrenOfItem(item).length} 个子项 · 点击进入',
       MapItemKind.free => '磁盘剩余可用空间',
       MapItemKind.hidden => '系统占用或受限目录',
       _ => '',
@@ -308,9 +428,10 @@ class StrataController extends ChangeNotifier {
 }
 
 class StrataRootView extends StatefulWidget {
-  const StrataRootView({super.key, this.controller});
+  const StrataRootView({super.key, this.controller, this.enableRust = false});
 
   final StrataController? controller;
+  final bool enableRust;
 
   @override
   State<StrataRootView> createState() => _StrataRootViewState();
@@ -324,7 +445,8 @@ class _StrataRootViewState extends State<StrataRootView> {
   void initState() {
     super.initState();
     _ownsController = widget.controller == null;
-    _controller = widget.controller ?? StrataController();
+    _controller =
+        widget.controller ?? StrataController(enableRust: widget.enableRust);
   }
 
   @override
@@ -352,15 +474,30 @@ class _StrataRootViewState extends State<StrataRootView> {
                   color: theme.text.color,
                   fontFamily: 'Segoe UI',
                 ),
-                child: Row(
+                child: Stack(
                   children: [
-                    SizedBox(
-                      width: 340,
-                      child: _SidePanel(controller: _controller),
+                    Row(
+                      children: [
+                        SizedBox(
+                          width: 340,
+                          child: _SidePanel(controller: _controller),
+                        ),
+                        Expanded(child: _MapArea(controller: _controller)),
+                      ],
                     ),
-                    Expanded(
-                      child: _MapArea(controller: _controller),
-                    ),
+                    if (_controller.diskMenuOpen) ...[
+                      Positioned.fill(
+                        child: GestureDetector(
+                          behavior: HitTestBehavior.translucent,
+                          onTap: () => _controller.setDiskMenuOpen(false),
+                        ),
+                      ),
+                      Positioned(
+                        left: 22,
+                        top: 78,
+                        child: _DiskPickerOverlay(controller: _controller),
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -394,7 +531,11 @@ class _SidePanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (atTop)
-            _DiskHeader(catalog: catalog, theme: theme)
+            _DiskHeader(
+              controller: controller,
+              catalog: catalog,
+              theme: theme,
+            )
           else
             _FolderHeader(
               controller: controller,
@@ -420,7 +561,8 @@ class _SidePanel extends StatelessWidget {
               ),
               itemBuilder: (context, index) {
                 final item = items[index];
-                final tone = controller.scene?.toneOfTopItem(item.id) ??
+                final tone =
+                    controller.scene?.toneOfTopItem(item.id) ??
                     const Tone.neutral();
                 final swatch = theme.fill(tone).color;
                 final isOn = controller.highlighted == item.id;
@@ -442,8 +584,9 @@ class _SidePanel extends StatelessWidget {
                         horizontal: 8,
                       ),
                       decoration: BoxDecoration(
-                        color: theme.line.color
-                            .withValues(alpha: isOn ? 0.09 : 0.0),
+                        color: theme.line.color.withValues(
+                          alpha: isOn ? 0.09 : 0.0,
+                        ),
                         borderRadius: BorderRadius.circular(7),
                       ),
                       child: Row(
@@ -485,12 +628,43 @@ class _SidePanel extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 12),
-          Text(
-            '示例磁盘 · ${Format.count(catalog.tree.entryCount)} 项',
-            style: TextStyle(
-              fontSize: 12,
-              color: theme.secondaryText.color,
-            ),
+          Row(
+            children: [
+              if (controller.scanning)
+                Text(
+                  '正在扫描磁盘…',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: theme.secondaryText.color,
+                  ),
+                )
+              else ...[
+                Text(
+                  '${controller.enableRust ? "已扫描" : "示例磁盘"} · ${Format.count(catalog.tree.entryCount)} 项',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: theme.secondaryText.color,
+                  ),
+                ),
+                if (controller.enableRust) ...[
+                  const SizedBox(width: 10),
+                  MouseRegion(
+                    cursor: SystemMouseCursors.click,
+                    child: GestureDetector(
+                      onTap: controller.rescan,
+                      child: Text(
+                        '重新扫描',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: theme.secondaryText.color,
+                          decoration: TextDecoration.underline,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ],
           ),
         ],
       ),
@@ -499,8 +673,13 @@ class _SidePanel extends StatelessWidget {
 }
 
 class _DiskHeader extends StatelessWidget {
-  const _DiskHeader({required this.catalog, required this.theme});
+  const _DiskHeader({
+    required this.controller,
+    required this.catalog,
+    required this.theme,
+  });
 
+  final StrataController controller;
   final MapCatalog catalog;
   final StrataTheme theme;
 
@@ -511,21 +690,46 @@ class _DiskHeader extends StatelessWidget {
     final free = catalog.volume?.availableBytes ?? 0;
     final solid = theme.tones[2].color;
     final muted = theme.hidden.lighter(theme.isDark ? 0.07 : -0.08).color;
+    final canPick = controller.volumes.isNotEmpty;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          catalog.volume?.name ?? catalog.tree.rootPath,
-          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600),
+        MouseRegion(
+          cursor: canPick ? SystemMouseCursors.click : SystemMouseCursors.basic,
+          child: GestureDetector(
+            onTap: canPick
+                ? () => controller.setDiskMenuOpen(!controller.diskMenuOpen)
+                : null,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    catalog.volume?.name ?? catalog.tree.rootPath,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                if (canPick) ...[
+                  const SizedBox(width: 6),
+                  Icon(
+                    Icons.keyboard_arrow_down,
+                    size: 20,
+                    color: theme.secondaryText.color,
+                  ),
+                ],
+              ],
+            ),
+          ),
         ),
         const SizedBox(height: 18),
         _CapacityBar(
-          parts: [
-            (files, solid),
-            (hidden, muted),
-            (free, null),
-          ],
+          parts: [(files, solid), (hidden, muted), (free, null)],
           outline: theme.line.color.withValues(alpha: 0.42),
         ),
         const SizedBox(height: 13),
@@ -625,10 +829,7 @@ class _FolderHeader extends StatelessWidget {
         ),
         const SizedBox(height: 18),
         _CapacityBar(
-          parts: [
-            (node.size, solid),
-            (math.max(0, total - node.size), null),
-          ],
+          parts: [(node.size, solid), (math.max(0, total - node.size), null)],
           outline: theme.line.color.withValues(alpha: 0.42),
         ),
         const SizedBox(height: 13),
@@ -665,10 +866,7 @@ class _CapacityBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final total = math.max(
-      parts.fold<int>(0, (s, p) => s + p.$1),
-      1,
-    );
+    final total = math.max(parts.fold<int>(0, (s, p) => s + p.$1), 1);
     return Container(
       height: 10,
       decoration: BoxDecoration(
@@ -1007,6 +1205,7 @@ class _MapCanvasState extends State<_MapCanvas>
           onExit: (_) => widget.controller.pointerMoved(null),
           child: GestureDetector(
             onTapUp: (e) => widget.controller.clickedAt(e.localPosition),
+            onSecondaryTapUp: (e) => _showContextMenu(context, e),
             child: RepaintBoundary(
               child: CustomPaint(
                 size: size,
@@ -1018,11 +1217,204 @@ class _MapCanvasState extends State<_MapCanvas>
       },
     );
   }
+
+  Future<void> _showContextMenu(
+    BuildContext context,
+    TapUpDetails details,
+  ) async {
+    if (!widget.controller.enableRust) return;
+    final item = widget.controller.hitItemAt(details.localPosition);
+    if (item == null || !item.isEntry) return;
+
+    final action = await showMenu<String>(
+      context: context,
+      position: RelativeRect.fromLTRB(
+        details.globalPosition.dx,
+        details.globalPosition.dy,
+        details.globalPosition.dx + 1,
+        details.globalPosition.dy + 1,
+      ),
+      items: const [
+        PopupMenuItem(value: 'reveal', child: Text('在资源管理器中显示')),
+        PopupMenuItem(value: 'trash', child: Text('移到回收站…')),
+      ],
+    );
+    if (!context.mounted) return;
+    if (action == 'reveal') {
+      await widget.controller.revealItem(item);
+    } else if (action == 'trash') {
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('移到回收站？'),
+          content: Text('确定将“${item.title}”（${Format.size(item.size)}）移到回收站吗？'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: const Text('取消'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              child: const Text('移到回收站'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed == true) {
+        await widget.controller.trashItem(item);
+      }
+    }
+  }
+}
+
+class _DiskPickerOverlay extends StatelessWidget {
+  const _DiskPickerOverlay({required this.controller});
+
+  final StrataController controller;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = controller.theme;
+    return Container(
+      width: 300,
+      padding: const EdgeInsets.all(6),
+      decoration: BoxDecoration(
+        color: theme.background.lighter(theme.isDark ? 0.06 : 0.035).color,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: theme.line.color.withValues(alpha: 0.16)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: theme.isDark ? 0.4 : 0.14),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final vol in controller.volumes)
+            _DiskPickerRow(
+              volume: vol,
+              isCurrent:
+                  controller.selectedVolume?.mountPoint == vol.mountPoint,
+              theme: theme,
+              onTap: () => controller.selectVolume(vol),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _DiskPickerRow extends StatefulWidget {
+  const _DiskPickerRow({
+    required this.volume,
+    required this.isCurrent,
+    required this.theme,
+    required this.onTap,
+  });
+
+  final rust.VolumeSummary volume;
+  final bool isCurrent;
+  final StrataTheme theme;
+  final VoidCallback onTap;
+
+  @override
+  State<_DiskPickerRow> createState() => _DiskPickerRowState();
+}
+
+class _DiskPickerRowState extends State<_DiskPickerRow> {
+  bool _hovering = false;
+
+  @override
+  Widget build(BuildContext context) {
+    final total = widget.volume.totalBytes.toInt();
+    final avail = widget.volume.availableBytes.toInt();
+    final used = math.max(0, total - avail);
+    final share = total > 0 ? (used / total).clamp(0.0, 1.0) : 0.0;
+    final theme = widget.theme;
+
+    return MouseRegion(
+      cursor: SystemMouseCursors.click,
+      onEnter: (_) => setState(() => _hovering = true),
+      onExit: (_) => setState(() => _hovering = false),
+      child: GestureDetector(
+        onTap: widget.onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+          decoration: BoxDecoration(
+            color: theme.line.color.withValues(alpha: _hovering ? 0.09 : 0.0),
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 14,
+                child: widget.isCurrent
+                    ? Icon(Icons.check, size: 13, color: theme.text.color)
+                    : null,
+              ),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            widget.volume.name,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          '可用 ${Format.size(avail)}',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: theme.secondaryText.color,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Container(
+                      height: 5,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(3),
+                        border: Border.all(
+                          color: theme.line.color.withValues(alpha: 0.32),
+                          width: 0.8,
+                        ),
+                      ),
+                      clipBehavior: Clip.antiAlias,
+                      child: FractionallySizedBox(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: share,
+                        child: Container(color: theme.tones[2].color),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _StrataPainter extends CustomPainter {
   _StrataPainter({required this.controller})
-      : super(repaint: controller.canvasTick);
+    : super(repaint: controller.canvasTick);
 
   final StrataController controller;
 
@@ -1120,15 +1512,18 @@ class _HoverCardOverlay extends StatelessWidget {
               width: width,
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
               decoration: BoxDecoration(
-                color: theme.background.lighter(theme.isDark ? 0.07 : 0.04).color,
+                color: theme.background
+                    .lighter(theme.isDark ? 0.07 : 0.04)
+                    .color,
                 borderRadius: BorderRadius.circular(11),
                 border: Border.all(
                   color: theme.line.color.withValues(alpha: 0.18),
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black
-                        .withValues(alpha: theme.isDark ? 0.35 : 0.12),
+                    color: Colors.black.withValues(
+                      alpha: theme.isDark ? 0.35 : 0.12,
+                    ),
                     blurRadius: 12,
                     offset: const Offset(0, 4),
                   ),
