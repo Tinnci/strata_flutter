@@ -4,12 +4,12 @@ import 'package:material_ui/material_ui.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 
+import '../model/disk_backend.dart';
 import '../model/file_tree.dart';
 import '../motion/morph.dart';
 import '../motion/motion_state.dart';
 import '../render/map_renderer.dart';
 import '../scene/map_scene.dart';
-import '../src/rust/api/scan.dart' as rust;
 import '../theme/theme.dart';
 
 class HoverInfo {
@@ -34,17 +34,17 @@ class PointerState {
 }
 
 class StrataController extends ChangeNotifier {
-  StrataController({this.enableRust = false}) {
-    catalog = DemoDisk.catalog();
-    if (enableRust) {
-      Future.microtask(initRust);
+  StrataController({this.backend = const SampleDiskBackend()}) {
+    catalog = SampleCatalog.build();
+    if (backend.supportsSystemActions) {
+      Future.microtask(initialize);
     }
   }
 
-  final bool enableRust;
+  final DiskBackend backend;
   late MapCatalog catalog;
-  List<rust.VolumeSummary> _volumes = const [];
-  rust.VolumeSummary? _selectedVolume;
+  List<DiskVolume> _volumes = const [];
+  DiskVolume? _selectedVolume;
   bool _scanning = false;
   bool _diskMenuOpen = false;
   String? _scanError;
@@ -70,8 +70,8 @@ class StrataController extends ChangeNotifier {
   int? get highlighted => _highlighted;
   int? get flowFocus => _flowFocus;
   Size get mapSize => _mapSize;
-  List<rust.VolumeSummary> get volumes => _volumes;
-  rust.VolumeSummary? get selectedVolume => _selectedVolume;
+  List<DiskVolume> get volumes => _volumes;
+  DiskVolume? get selectedVolume => _selectedVolume;
   bool get scanning => _scanning;
   bool get diskMenuOpen => _diskMenuOpen;
   String? get scanError => _scanError;
@@ -82,9 +82,9 @@ class StrataController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> initRust() async {
+  Future<void> initialize() async {
     try {
-      _volumes = rust.listVolumes();
+      _volumes = await backend.listVolumes();
       if (_volumes.isNotEmpty) {
         final preferred = _volumes.firstWhere(
           (v) => v.isSystemDrive,
@@ -98,7 +98,7 @@ class StrataController extends ChangeNotifier {
     }
   }
 
-  Future<void> selectVolume(rust.VolumeSummary volume) async {
+  Future<void> selectVolume(DiskVolume volume) async {
     _diskMenuOpen = false;
     _selectedVolume = volume;
     await scanPath(volume.mountPoint, volume: volume);
@@ -108,26 +108,22 @@ class StrataController extends ChangeNotifier {
     final v = _selectedVolume;
     if (v != null) {
       await scanPath(v.mountPoint, volume: v);
-    } else if (enableRust) {
-      await initRust();
+    } else if (backend.supportsSystemActions) {
+      await initialize();
     }
   }
 
   Future<void> scanPath(
     String rootPath, {
-    rust.VolumeSummary? volume,
+    DiskVolume? volume,
   }) async {
-    if (!enableRust || _scanning) return;
+    if (!backend.supportsSystemActions || _scanning) return;
     _scanning = true;
     _scanError = null;
     notifyListeners();
 
     try {
-      final result = await rust.scanDirectory(
-        rootPath: rootPath,
-        pruneBelowBytes: BigInt.from(1000000),
-      );
-      catalog = MapCatalog.fromRust(result, volume: volume);
+      catalog = await backend.scanPath(rootPath, volume: volume);
       _focus = FileTree.root;
       _highlighted = null;
       _flowFocus = null;
@@ -142,11 +138,11 @@ class StrataController extends ChangeNotifier {
   }
 
   Future<void> revealItem(MapItem item) async {
-    if (!enableRust || !item.isEntry) return;
+    if (!backend.supportsSystemActions || !item.isEntry) return;
     final path = catalog.pathOf(item.id);
     if (path == null) return;
     try {
-      await rust.revealInExplorer(path: path);
+      await backend.revealInExplorer(path);
     } catch (e) {
       _scanError = e.toString();
       notifyListeners();
@@ -154,11 +150,11 @@ class StrataController extends ChangeNotifier {
   }
 
   Future<void> trashItem(MapItem item) async {
-    if (!enableRust || !item.isEntry) return;
+    if (!backend.supportsSystemActions || !item.isEntry) return;
     final path = catalog.pathOf(item.id);
     if (path == null) return;
     try {
-      await rust.moveToTrash(path: path);
+      await backend.moveToTrash(path);
       await rescan();
     } catch (e) {
       _scanError = e.toString();
@@ -428,10 +424,14 @@ class StrataController extends ChangeNotifier {
 }
 
 class StrataRootView extends StatefulWidget {
-  const StrataRootView({super.key, this.controller, this.enableRust = false});
+  const StrataRootView({
+    super.key,
+    this.controller,
+    this.backend = const SampleDiskBackend(),
+  });
 
   final StrataController? controller;
-  final bool enableRust;
+  final DiskBackend backend;
 
   @override
   State<StrataRootView> createState() => _StrataRootViewState();
@@ -446,7 +446,7 @@ class _StrataRootViewState extends State<StrataRootView> {
     super.initState();
     _ownsController = widget.controller == null;
     _controller =
-        widget.controller ?? StrataController(enableRust: widget.enableRust);
+        widget.controller ?? StrataController(backend: widget.backend);
   }
 
   @override
@@ -640,13 +640,13 @@ class _SidePanel extends StatelessWidget {
                 )
               else ...[
                 Text(
-                  '${controller.enableRust ? "已扫描" : "示例磁盘"} · ${Format.count(catalog.tree.entryCount)} 项',
+                  '${controller.backend.supportsSystemActions ? "已扫描" : "预览数据"} · ${Format.count(catalog.tree.entryCount)} 项',
                   style: TextStyle(
                     fontSize: 12,
                     color: theme.secondaryText.color,
                   ),
                 ),
-                if (controller.enableRust) ...[
+                if (controller.backend.supportsSystemActions) ...[
                   const SizedBox(width: 10),
                   MouseRegion(
                     cursor: SystemMouseCursors.click,
@@ -1222,7 +1222,7 @@ class _MapCanvasState extends State<_MapCanvas>
     BuildContext context,
     TapUpDetails details,
   ) async {
-    if (!widget.controller.enableRust) return;
+    if (!widget.controller.backend.supportsSystemActions) return;
     final item = widget.controller.hitItemAt(details.localPosition);
     if (item == null || !item.isEntry) return;
 
@@ -1315,7 +1315,7 @@ class _DiskPickerRow extends StatefulWidget {
     required this.onTap,
   });
 
-  final rust.VolumeSummary volume;
+  final DiskVolume volume;
   final bool isCurrent;
   final StrataTheme theme;
   final VoidCallback onTap;
@@ -1329,8 +1329,8 @@ class _DiskPickerRowState extends State<_DiskPickerRow> {
 
   @override
   Widget build(BuildContext context) {
-    final total = widget.volume.totalBytes.toInt();
-    final avail = widget.volume.availableBytes.toInt();
+    final total = widget.volume.totalBytes;
+    final avail = widget.volume.availableBytes;
     final used = math.max(0, total - avail);
     final share = total > 0 ? (used / total).clamp(0.0, 1.0) : 0.0;
     final theme = widget.theme;

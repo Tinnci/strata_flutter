@@ -108,7 +108,7 @@ void main() {
     });
 
     test('Morph matches inner folder items across drill-down scenes', () {
-      final catalog = DemoDisk.catalog();
+      final catalog = SampleCatalog.build();
       final topItems = catalog.itemsIn(FileTree.root);
       final folder = topItems.firstWhere(
         (it) =>

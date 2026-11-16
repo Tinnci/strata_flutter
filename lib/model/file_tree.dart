@@ -25,6 +25,22 @@ class TreeNode {
   final List<int> children;
 }
 
+class DiskVolume {
+  const DiskVolume({
+    required this.name,
+    required this.mountPoint,
+    required this.totalBytes,
+    required this.availableBytes,
+    this.isSystemDrive = false,
+  });
+
+  final String name;
+  final String mountPoint;
+  final int totalBytes;
+  final int availableBytes;
+  final bool isSystemDrive;
+}
+
 class VolumeInfo {
   const VolumeInfo({
     required this.name,
@@ -261,9 +277,9 @@ class MapCatalog {
     return '$base$sep${segments.reversed.join(sep)}';
   }
 
-  static MapCatalog fromRust(
+  static MapCatalog fromScanResult(
     rust.ScanResultData data, {
-    rust.VolumeSummary? volume,
+    DiskVolume? volume,
   }) {
     final nodes = data.nodes.map((n) {
       final kind = n.isSmallGroup
@@ -292,8 +308,8 @@ class MapCatalog {
       volume: volume != null
           ? VolumeInfo(
               name: volume.name,
-              totalBytes: volume.totalBytes.toInt(),
-              availableBytes: volume.availableBytes.toInt(),
+              totalBytes: volume.totalBytes,
+              availableBytes: volume.availableBytes,
             )
           : null,
     );
@@ -333,121 +349,121 @@ abstract final class Format {
   }
 }
 
-class _DemoFolder {
-  const _DemoFolder(this.name, [this.gb = 0.0, this.inside = const []]);
+class _SampleFolder {
+  const _SampleFolder(this.name, [this.gb = 0.0, this.inside = const []]);
 
   final String name;
   final double gb;
-  final List<_DemoFolder> inside;
+  final List<_SampleFolder> inside;
 }
 
-abstract final class DemoDisk {
+abstract final class SampleCatalog {
   static const int _gb = 1000000000;
 
-  static const _rootFolder = _DemoFolder('', 0.2, [
-    _DemoFolder('Users', 0, [
-      _DemoFolder('alex', 0.3, [
-        _DemoFolder('Library', 0.4, [
-          _DemoFolder('Developer', 0.1, [
-            _DemoFolder('Xcode', 0.2, [
-              _DemoFolder('DerivedData', 1.6, [
-                _DemoFolder('Lumen-fkqzdh', 7.4),
-                _DemoFolder('Harbor-azbtrc', 5.1),
-                _DemoFolder('Cinder-rkpxwo', 3.8),
+  static const _rootFolder = _SampleFolder('', 0.2, [
+    _SampleFolder('Users', 0, [
+      _SampleFolder('alex', 0.3, [
+        _SampleFolder('Library', 0.4, [
+          _SampleFolder('Developer', 0.1, [
+            _SampleFolder('Xcode', 0.2, [
+              _SampleFolder('DerivedData', 1.6, [
+                _SampleFolder('Lumen-fkqzdh', 7.4),
+                _SampleFolder('Harbor-azbtrc', 5.1),
+                _SampleFolder('Cinder-rkpxwo', 3.8),
               ]),
-              _DemoFolder('iOS DeviceSupport', 0, [
-                _DemoFolder('iPhone17,1 26.1', 6.8),
-                _DemoFolder('iPhone16,2 18.6', 4.9),
+              _SampleFolder('iOS DeviceSupport', 0, [
+                _SampleFolder('iPhone17,1 26.1', 6.8),
+                _SampleFolder('iPhone16,2 18.6', 4.9),
               ]),
-              _DemoFolder('Archives', 3.4),
+              _SampleFolder('Archives', 3.4),
             ]),
-            _DemoFolder('CoreSimulator', 0.3, [
-              _DemoFolder('Devices', 48.0),
-              _DemoFolder('Caches', 6.4),
+            _SampleFolder('CoreSimulator', 0.3, [
+              _SampleFolder('Devices', 48.0),
+              _SampleFolder('Caches', 6.4),
             ]),
           ]),
-          _DemoFolder('Application Support', 1.2, [
-            _DemoFolder('Steam', 0.4, [_DemoFolder('steamapps', 62.0)]),
-            _DemoFolder('MobileSync', 0, [_DemoFolder('Backup', 12.3)]),
-            _DemoFolder('Adobe', 7.2),
-            _DemoFolder('Google', 0.2, [_DemoFolder('Chrome', 3.9)]),
-            _DemoFolder('Code', 2.3),
-            _DemoFolder('Slack', 1.6),
+          _SampleFolder('Application Support', 1.2, [
+            _SampleFolder('Steam', 0.4, [_SampleFolder('steamapps', 62.0)]),
+            _SampleFolder('MobileSync', 0, [_SampleFolder('Backup', 12.3)]),
+            _SampleFolder('Adobe', 7.2),
+            _SampleFolder('Google', 0.2, [_SampleFolder('Chrome', 3.9)]),
+            _SampleFolder('Code', 2.3),
+            _SampleFolder('Slack', 1.6),
           ]),
-          _DemoFolder('Containers', 3.0, [
-            _DemoFolder('com.docker.docker', 21.0),
-            _DemoFolder('com.apple.mail', 5.3),
-            _DemoFolder('com.apple.Safari', 2.2),
+          _SampleFolder('Containers', 3.0, [
+            _SampleFolder('com.docker.docker', 21.0),
+            _SampleFolder('com.apple.mail', 5.3),
+            _SampleFolder('com.apple.Safari', 2.2),
           ]),
-          _DemoFolder('Caches', 2.1, [
-            _DemoFolder('com.spotify.client', 4.6),
-            _DemoFolder('Homebrew', 3.4),
-            _DemoFolder('Google', 2.2),
-            _DemoFolder('pip', 1.3),
+          _SampleFolder('Caches', 2.1, [
+            _SampleFolder('com.spotify.client', 4.6),
+            _SampleFolder('Homebrew', 3.4),
+            _SampleFolder('Google', 2.2),
+            _SampleFolder('pip', 1.3),
           ]),
-          _DemoFolder('Messages', 7.8),
-          _DemoFolder('Mail', 4.4),
+          _SampleFolder('Messages', 7.8),
+          _SampleFolder('Mail', 4.4),
         ]),
-        _DemoFolder('Pictures', 0.6, [
-          _DemoFolder('Photos Library', 0.4, [
-            _DemoFolder('originals', 160.0),
-            _DemoFolder('resources', 13.6),
+        _SampleFolder('Pictures', 0.6, [
+          _SampleFolder('Photos Library', 0.4, [
+            _SampleFolder('originals', 160.0),
+            _SampleFolder('resources', 13.6),
           ]),
-          _DemoFolder('Lightroom', 9.6),
+          _SampleFolder('Lightroom', 9.6),
         ]),
-        _DemoFolder('Movies', 3.0, [
-          _DemoFolder('Final Cut Projects', 88.0),
-          _DemoFolder('Screen Recordings', 8.2),
+        _SampleFolder('Movies', 3.0, [
+          _SampleFolder('Final Cut Projects', 88.0),
+          _SampleFolder('Screen Recordings', 8.2),
         ]),
-        _DemoFolder('Documents', 2.2, [
-          _DemoFolder('Projects', 0.5, [
-            _DemoFolder('Strata', 9.2),
-            _DemoFolder('Harbor', 6.1),
-            _DemoFolder('Website', 2.4),
+        _SampleFolder('Documents', 2.2, [
+          _SampleFolder('Projects', 0.5, [
+            _SampleFolder('Strata', 9.2),
+            _SampleFolder('Harbor', 6.1),
+            _SampleFolder('Website', 2.4),
           ]),
-          _DemoFolder('Design', 8.8),
-          _DemoFolder('Papers', 3.1),
+          _SampleFolder('Design', 8.8),
+          _SampleFolder('Papers', 3.1),
         ]),
-        _DemoFolder('Music', 0.3, [
-          _DemoFolder('Media', 21.0),
-          _DemoFolder('Logic', 6.4),
+        _SampleFolder('Music', 0.3, [
+          _SampleFolder('Media', 21.0),
+          _SampleFolder('Logic', 6.4),
         ]),
-        _DemoFolder('Downloads', 16.5),
-        _DemoFolder('Desktop', 4.1),
-        _DemoFolder('.cache', 0.2, [
-          _DemoFolder('huggingface', 38.0),
-          _DemoFolder('uv', 1.4),
+        _SampleFolder('Downloads', 16.5),
+        _SampleFolder('Desktop', 4.1),
+        _SampleFolder('.cache', 0.2, [
+          _SampleFolder('huggingface', 38.0),
+          _SampleFolder('uv', 1.4),
         ]),
-        _DemoFolder('.npm', 0.1, [_DemoFolder('_cacache', 3.1)]),
-        _DemoFolder('.cargo', 0.1, [
-          _DemoFolder('registry', 0, [_DemoFolder('cache', 1.8)]),
+        _SampleFolder('.npm', 0.1, [_SampleFolder('_cacache', 3.1)]),
+        _SampleFolder('.cargo', 0.1, [
+          _SampleFolder('registry', 0, [_SampleFolder('cache', 1.8)]),
         ]),
       ]),
-      _DemoFolder('Shared', 1.4),
+      _SampleFolder('Shared', 1.4),
     ]),
-    _DemoFolder('Applications', 2.4, [
-      _DemoFolder('Xcode', 12.6),
-      _DemoFolder('Final Cut Pro', 6.1),
-      _DemoFolder('Photoshop 2026', 4.4),
-      _DemoFolder('Logic Pro', 3.2),
-      _DemoFolder('Docker', 2.1),
-      _DemoFolder('Blender', 1.5),
+    _SampleFolder('Applications', 2.4, [
+      _SampleFolder('Xcode', 12.6),
+      _SampleFolder('Final Cut Pro', 6.1),
+      _SampleFolder('Photoshop 2026', 4.4),
+      _SampleFolder('Logic Pro', 3.2),
+      _SampleFolder('Docker', 2.1),
+      _SampleFolder('Blender', 1.5),
     ]),
-    _DemoFolder('Library', 1.3, [
-      _DemoFolder('Audio', 0, [_DemoFolder('Apple Loops', 8.4)]),
-      _DemoFolder('Application Support', 4.2),
-      _DemoFolder('Developer', 0, [_DemoFolder('CommandLineTools', 3.6)]),
+    _SampleFolder('Library', 1.3, [
+      _SampleFolder('Audio', 0, [_SampleFolder('Apple Loops', 8.4)]),
+      _SampleFolder('Application Support', 4.2),
+      _SampleFolder('Developer', 0, [_SampleFolder('CommandLineTools', 3.6)]),
     ]),
-    _DemoFolder('opt', 0, [_DemoFolder('homebrew', 6.8)]),
+    _SampleFolder('opt', 0, [_SampleFolder('homebrew', 6.8)]),
   ]);
 
-  static MapCatalog catalog() {
+  static MapCatalog build() {
     final rawParents = <int?>[];
     final rawNames = <String>[];
     final rawSizes = <int>[];
     final rawChildren = <List<int>>[];
 
-    int addNode(_DemoFolder folder, int? parent) {
+    int addNode(_SampleFolder folder, int? parent) {
       final id = rawNames.length;
       rawParents.add(parent);
       rawNames.add(folder.name);
