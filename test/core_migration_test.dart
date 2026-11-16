@@ -142,5 +142,78 @@ void main() {
         expect(midPose.innerAlpha, isNotEmpty);
       }
     });
+
+    test('FlowScene keeps positive bar widths on deep dense trees', () {
+      final nodes = <TreeNode>[];
+      final rootChildren = <int>[];
+      nodes.add(const TreeNode(
+        id: 0,
+        parent: null,
+        name: 'C:\\',
+        size: 1000000,
+        kind: NodeKind.directory,
+        children: [],
+      ));
+      for (var i = 0; i < 10; i++) {
+        final l1Id = nodes.length;
+        rootChildren.add(l1Id);
+        final l1Children = <int>[];
+        nodes.add(TreeNode(
+          id: l1Id,
+          parent: 0,
+          name: 'dir_$i',
+          size: 100000,
+          kind: NodeKind.directory,
+          children: l1Children,
+        ));
+        for (var j = 0; j < 10; j++) {
+          final l2Id = nodes.length;
+          l1Children.add(l2Id);
+          final l2Children = <int>[];
+          nodes.add(TreeNode(
+            id: l2Id,
+            parent: l1Id,
+            name: 'sub_${i}_$j',
+            size: 10000,
+            kind: NodeKind.directory,
+            children: l2Children,
+          ));
+          for (var k = 0; k < 10; k++) {
+            final l3Id = nodes.length;
+            l2Children.add(l3Id);
+            nodes.add(TreeNode(
+              id: l3Id,
+              parent: l2Id,
+              name: 'leaf_${i}_${j}_$k',
+              size: 1000,
+              kind: NodeKind.directory,
+            ));
+          }
+        }
+      }
+      nodes[0] = TreeNode(
+        id: 0,
+        parent: null,
+        name: 'C:\\',
+        size: 1000000,
+        kind: NodeKind.directory,
+        children: rootChildren,
+      );
+      final catalog = MapCatalog(
+        tree: FileTree(
+          nodes: nodes,
+          rootPath: 'C:\\',
+          scannedAt: DateTime.now(),
+          entryCount: nodes.length,
+        ),
+      );
+      final flow = FlowScene.build(
+        catalog: catalog,
+        focus: FileTree.root,
+        size: const Size(800, 600),
+      );
+      expect(flow.bars, isNotEmpty);
+      expect(flow.bars.first.rect.width, greaterThan(20.0));
+    });
   });
 }

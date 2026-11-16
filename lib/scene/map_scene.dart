@@ -386,9 +386,19 @@ class FlowRibbonVisual {
 class FlowScene {
   FlowScene({required this.bars, required this.ribbons, required this.size});
 
-  static const double rowHeight = 36.0;
-  static const double between = 28.0;
-  static const double spacing = 7.0;
+  static const int levels = 4;
+  static const double between = 54.0;
+  static const double spacing = 4.0;
+  static const List<double> _shifts = [
+    0.0,
+    -0.045,
+    0.040,
+    -0.022,
+    0.060,
+    -0.062,
+    0.024,
+    -0.036,
+  ];
 
   final List<FlowBarVisual> bars;
   final List<FlowRibbonVisual> ribbons;
@@ -432,44 +442,39 @@ class FlowScene {
     required int focus,
     required Size size,
   }) {
-    if (size.width <= 80 || size.height <= 80) {
+    if (size.width <= 120 || size.height <= 120) {
       return FlowScene(bars: const [], ribbons: const [], size: size);
     }
 
-    const levels = 5;
+    final rowHeight = math.min(
+      108.0,
+      math.max(40.0, (size.height - between * (levels - 1)) / levels),
+    );
     final itemsByTempId = <int, MapItem>{};
     final keysByTempId = <int, String>{};
     final tonesByTempId = <int, Tone>{};
     var nextId = 1;
     var standIn = -100;
 
-    FlowInput? buildInput(
-      MapItem item,
-      int depth,
-      String parentKey,
-      Tone tone,
-    ) {
-      final tempId = nextId++;
-      final key = catalog.keyOf(item, parentKey: parentKey);
-      itemsByTempId[tempId] = item;
-      keysByTempId[tempId] = key;
-      tonesByTempId[tempId] = tone;
+    List<MapItem> condensed(
+      List<MapItem> source, {
+      required double minimumShare,
+      required int limit,
+    }) {
+      if (source.isEmpty) return const [];
+      final total = source.fold<int>(0, (s, e) => s + e.size);
+      if (total <= 0) return const [];
 
-      if (depth >= levels || item.kind != MapItemKind.folder) {
-        return FlowInput(id: tempId, size: item.size.toDouble());
-      }
-
-      final rawKids = catalog.childrenOfItem(item);
-      final total = rawKids.fold<int>(0, (s, e) => s + e.size);
       final kept = <MapItem>[];
       var smallBytes = 0;
       var smallCount = 0;
-      for (final kid in rawKids) {
-        if (total > 0 && kept.length < 10 && kid.size / total >= 0.03) {
-          kept.add(kid);
+      for (final item in source) {
+        if (item.isOutsideScan ||
+            (kept.length < limit && item.size / total >= minimumShare)) {
+          kept.add(item);
         } else {
-          smallBytes += kid.size;
-          smallCount += kid.kind == MapItemKind.small ? kid.count : 1;
+          smallBytes += item.size;
+          smallCount += item.kind == MapItemKind.small ? item.count : 1;
         }
       }
       if (smallBytes > 0) {
@@ -483,49 +488,67 @@ class FlowScene {
           ),
         );
       }
+      return kept;
+    }
+
+    final keptTop = condensed(
+      catalog.itemsIn(focus),
+      minimumShare: 10.0 / size.width,
+      limit: 16,
+    );
+    if (keptTop.isEmpty) {
+      return FlowScene(bars: const [], ribbons: const [], size: size);
+    }
+
+    final total = math.max(
+      keptTop.fold<double>(0.0, (s, e) => s + e.size.toDouble()),
+      1.0,
+    );
+    final roughScale = size.width * 0.85 / total;
+
+    FlowInput buildInput(
+      MapItem item,
+      int depth,
+      String parentKey,
+      Tone tone,
+    ) {
+      final tempId = nextId++;
+      final key = catalog.keyOf(item, parentKey: parentKey);
+      itemsByTempId[tempId] = item;
+      keysByTempId[tempId] = key;
+      tonesByTempId[tempId] = tone;
+
+      final estWidth = item.size.toDouble() * roughScale;
+      if (depth >= levels ||
+          item.kind != MapItemKind.folder ||
+          estWidth < 22.0) {
+        return FlowInput(id: tempId, size: item.size.toDouble());
+      }
+
+      final kids = condensed(
+        catalog.childrenOfItem(item),
+        minimumShare: math.min(1.0, 9.0 / estWidth),
+        limit: 9,
+      );
+      if (kids.length <= 1) {
+        return FlowInput(id: tempId, size: item.size.toDouble());
+      }
 
       final children = <FlowInput>[];
-      for (var i = 0; i < kept.length; i++) {
-        final kid = kept[i];
+      for (var i = 0; i < kids.length; i++) {
+        final kid = kids[i];
         final childTone = kid.kind == MapItemKind.small
             ? tone.shifted(lightness: -0.05, chroma: 0.8)
             : tone.shifted(
-                lightness: (i.isEven ? 0.03 : -0.04) * (1.0 - depth * 0.12),
-                hue: ((i % 3) - 1) * 3.0,
+                lightness:
+                    _shifts[i % _shifts.length] * (depth == 1 ? 1.0 : 0.6),
               );
-        final node = buildInput(kid, depth + 1, key, childTone);
-        if (node != null) children.add(node);
+        children.add(buildInput(kid, depth + 1, key, childTone));
       }
       return FlowInput(
         id: tempId,
         size: item.size.toDouble(),
         children: children,
-      );
-    }
-
-    final topItems = catalog.itemsIn(focus);
-    final total = topItems.fold<int>(0, (s, e) => s + e.size);
-    final keptTop = <MapItem>[];
-    var smallBytes = 0;
-    var smallCount = 0;
-    for (final item in topItems) {
-      if (item.isOutsideScan ||
-          (total > 0 && keptTop.length < 14 && item.size / total >= 0.01)) {
-        keptTop.add(item);
-      } else {
-        smallBytes += item.size;
-        smallCount += item.kind == MapItemKind.small ? item.count : 1;
-      }
-    }
-    if (smallBytes > 0) {
-      keptTop.add(
-        MapItem(
-          id: standIn--,
-          name: '',
-          size: smallBytes,
-          kind: MapItemKind.small,
-          count: smallCount,
-        ),
       );
     }
 
@@ -545,8 +568,7 @@ class FlowScene {
         case MapItemKind.file:
           tone = Tone.family(familySlot++);
       }
-      final node = buildInput(item, 1, '', tone);
-      if (node != null) roots.add(node);
+      roots.add(buildInput(item, 1, '', tone));
     }
 
     final layout = FlowLayout.layout(
