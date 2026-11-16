@@ -5,11 +5,35 @@ import 'package:strata_flutter/layout/bubble_layout.dart';
 import 'package:strata_flutter/layout/flow_layout.dart';
 import 'package:strata_flutter/layout/geometry.dart';
 import 'package:strata_flutter/layout/squarify.dart';
+import 'package:strata_flutter/model/disk_backend.dart';
 import 'package:strata_flutter/model/file_tree.dart';
 import 'package:strata_flutter/motion/morph.dart';
 import 'package:strata_flutter/motion/motion.dart';
 import 'package:strata_flutter/scene/map_scene.dart';
 import 'package:strata_flutter/theme/theme.dart';
+import 'package:strata_flutter/ui/strata_app.dart';
+
+class _FailingBackend implements DiskBackend {
+  @override
+  bool get supportsSystemActions => true;
+
+  @override
+  Future<List<DiskVolume>> listVolumes() async => const [];
+
+  @override
+  Future<MapCatalog> scanPath(
+    String rootPath, {
+    DiskVolume? volume,
+    int pruneBelowBytes = 1000000,
+  }) async =>
+      throw StateError('unimplemented');
+
+  @override
+  Future<void> revealInExplorer(String path) async {}
+
+  @override
+  Future<void> moveToTrash(String path) async {}
+}
 
 void main() {
   group('Geometry & Squarify', () {
@@ -214,6 +238,18 @@ void main() {
       );
       expect(flow.bars, isNotEmpty);
       expect(flow.bars.first.rect.width, greaterThan(20.0));
+    });
+
+    test('StrataController never falls back to SampleCatalog on native failure', () async {
+      final controller = StrataController(backend: _FailingBackend());
+      expect(controller.phase, CatalogPhase.loading);
+      expect(controller.catalog, isNull);
+
+      await controller.initialize();
+      expect(controller.phase, CatalogPhase.error);
+      expect(controller.catalog, isNull);
+      expect(controller.scanError, isNotNull);
+      controller.dispose();
     });
   });
 }

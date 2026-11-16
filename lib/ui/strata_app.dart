@@ -33,20 +33,27 @@ class PointerState {
   final HoverInfo? info;
 }
 
+enum CatalogPhase { loading, ready, error }
+
 class StrataController extends ChangeNotifier {
   StrataController({this.backend = const SampleDiskBackend()}) {
-    catalog = SampleCatalog.build();
     if (backend.supportsSystemActions) {
+      _phase = CatalogPhase.loading;
       Future.microtask(initialize);
+    } else {
+      _catalog = SampleCatalog.build();
+      _phase = CatalogPhase.ready;
     }
   }
 
   final DiskBackend backend;
-  late MapCatalog catalog;
+  MapCatalog? _catalog;
+  CatalogPhase _phase = CatalogPhase.loading;
   List<DiskVolume> _volumes = const [];
   DiskVolume? _selectedVolume;
   bool _scanning = false;
   bool _diskMenuOpen = false;
+  bool _disposed = false;
   String? _scanError;
   StrataTheme _theme = StrataTheme.abyss;
   MapMode _mode = MapMode.bubbles;
@@ -63,6 +70,8 @@ class StrataController extends ChangeNotifier {
   final ValueNotifier<int> canvasTick = ValueNotifier<int>(0);
   VoidCallback? onRequestAnimate;
 
+  MapCatalog? get catalog => _catalog;
+  CatalogPhase get phase => _phase;
   StrataTheme get theme => _theme;
   MapMode get mode => _mode;
   int get focus => _focus;
@@ -82,19 +91,35 @@ class StrataController extends ChangeNotifier {
     notifyListeners();
   }
 
+  void _safeNotify() {
+    if (!_disposed) notifyListeners();
+  }
+
   Future<void> initialize() async {
+    if (_disposed) return;
+    if (_catalog == null) {
+      _phase = CatalogPhase.loading;
+      _scanError = null;
+      _safeNotify();
+    }
     try {
       _volumes = await backend.listVolumes();
-      if (_volumes.isNotEmpty) {
-        final preferred = _volumes.firstWhere(
-          (v) => v.isSystemDrive,
-          orElse: () => _volumes.first,
-        );
-        await selectVolume(preferred);
+      if (_disposed) return;
+      if (_volumes.isEmpty) {
+        _scanError = '未检测到可用磁盘';
+        if (_catalog == null) _phase = CatalogPhase.error;
+        _safeNotify();
+        return;
       }
+      final preferred = _volumes.firstWhere(
+        (v) => v.isSystemDrive,
+        orElse: () => _volumes.first,
+      );
+      await selectVolume(preferred);
     } catch (e) {
       _scanError = e.toString();
-      notifyListeners();
+      if (_catalog == null) _phase = CatalogPhase.error;
+      _safeNotify();
     }
   }
 
@@ -120,10 +145,14 @@ class StrataController extends ChangeNotifier {
     if (!backend.supportsSystemActions || _scanning) return;
     _scanning = true;
     _scanError = null;
+    if (_catalog == null) {
+      _phase = CatalogPhase.loading;
+    }
     notifyListeners();
 
     try {
-      catalog = await backend.scanPath(rootPath, volume: volume);
+      _catalog = await backend.scanPath(rootPath, volume: volume);
+      _phase = CatalogPhase.ready;
       _focus = FileTree.root;
       _highlighted = null;
       _flowFocus = null;
@@ -131,6 +160,9 @@ class StrataController extends ChangeNotifier {
       _rebuild(MapTransitionKind.swap);
     } catch (e) {
       _scanError = e.toString();
+      if (_catalog == null) {
+        _phase = CatalogPhase.error;
+      }
     } finally {
       _scanning = false;
       notifyListeners();
@@ -138,8 +170,9 @@ class StrataController extends ChangeNotifier {
   }
 
   Future<void> revealItem(MapItem item) async {
-    if (!backend.supportsSystemActions || !item.isEntry) return;
-    final path = catalog.pathOf(item.id);
+    final c = _catalog;
+    if (!backend.supportsSystemActions || !item.isEntry || c == null) return;
+    final path = c.pathOf(item.id);
     if (path == null) return;
     try {
       await backend.revealInExplorer(path);
@@ -150,8 +183,9 @@ class StrataController extends ChangeNotifier {
   }
 
   Future<void> trashItem(MapItem item) async {
-    if (!backend.supportsSystemActions || !item.isEntry) return;
-    final path = catalog.pathOf(item.id);
+    final c = _catalog;
+    if (!backend.supportsSystemActions || !item.isEntry || c == null) return;
+    final path = c.pathOf(item.id);
     if (path == null) return;
     try {
       await backend.moveToTrash(path);
@@ -200,7 +234,8 @@ class StrataController extends ChangeNotifier {
   }
 
   void goTo(int nodeId) {
-    if (nodeId == _focus) return;
+    final c = _catalog;
+    if (nodeId == _focus || c == null) return;
     final previousFocus = _focus;
     final previousScene = _scene;
     final previousFlowFocus = _flowFocus;
@@ -219,7 +254,7 @@ class StrataController extends ChangeNotifier {
 
     final nextScene = MapScene.build(
       _mode,
-      catalog: catalog,
+      catalog: c,
       focus: _focus,
       size: _mapSize,
     );
@@ -259,28 +294,32 @@ class StrataController extends ChangeNotifier {
   }
 
   bool _isDescendant(int nodeId, {required int of}) {
+    final c = _catalog;
+    if (c == null) return false;
     int? current = nodeId;
     while (current != null &&
         current >= 0 &&
-        current < catalog.tree.nodes.length) {
+        current < c.tree.nodes.length) {
       if (current == of) return true;
-      current = catalog.tree.nodes[current].parent;
+      current = c.tree.nodes[current].parent;
     }
     return false;
   }
 
   void goUp() {
-    if (_focus == FileTree.root) return;
-    final parent = catalog.tree.nodes[_focus].parent ?? FileTree.root;
+    final c = _catalog;
+    if (_focus == FileTree.root || c == null) return;
+    final parent = c.tree.nodes[_focus].parent ?? FileTree.root;
     goTo(parent);
   }
 
   void _rebuild(MapTransitionKind kind) {
-    if (_mapSize.width <= 80 || _mapSize.height <= 80) return;
+    final c = _catalog;
+    if (c == null || _mapSize.width <= 80 || _mapSize.height <= 80) return;
     final previous = _scene;
     _scene = MapScene.build(
       _mode,
-      catalog: catalog,
+      catalog: c,
       focus: _focus,
       size: _mapSize,
     );
@@ -368,14 +407,15 @@ class StrataController extends ChangeNotifier {
       _highlighted = topId;
       notifyListeners();
     }
-    if (item == null) {
+    final c = _catalog;
+    if (item == null || c == null) {
       pointer.value = PointerState(location: location, info: null);
       return;
     }
-    final total = math.max(catalog.totalBytes, 1);
+    final total = math.max(c.totalBytes, 1);
     final share = Format.percent(item.size / total);
     final detail = switch (item.kind) {
-      MapItemKind.folder => '${catalog.childrenOfItem(item).length} 个子项 · 点击进入',
+      MapItemKind.folder => '${c.childrenOfItem(item).length} 个子项 · 点击进入',
       MapItemKind.free => '磁盘剩余可用空间',
       MapItemKind.hidden => '系统占用或受限目录',
       _ => '',
@@ -407,16 +447,19 @@ class StrataController extends ChangeNotifier {
           targetItem = s.flow!.bars[idx].item;
         }
     }
+    final c = _catalog;
     if (targetItem != null &&
+        c != null &&
         targetItem.kind == MapItemKind.folder &&
         targetItem.id >= 0 &&
-        catalog.childrenOfIndex(targetItem.id).isNotEmpty) {
+        c.childrenOfIndex(targetItem.id).isNotEmpty) {
       goTo(targetItem.id);
     }
   }
 
   @override
   void dispose() {
+    _disposed = true;
     pointer.dispose();
     canvasTick.dispose();
     super.dispose();
@@ -474,32 +517,120 @@ class _StrataRootViewState extends State<StrataRootView> {
                   color: theme.text.color,
                   fontFamily: 'Segoe UI',
                 ),
-                child: Stack(
-                  children: [
-                    Row(
+                child: switch (_controller.phase) {
+                  CatalogPhase.loading => Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 24,
+                            height: 24,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2.2,
+                              color: theme.tones[0].color,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            _controller.selectedVolume != null
+                                ? '正在扫描 ${_controller.selectedVolume!.name}…'
+                                : '正在读取磁盘列表…',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                              color: theme.text.color,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  CatalogPhase.error => Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '无法读取磁盘内容',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w600,
+                              color: theme.text.color,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 420),
+                            child: Text(
+                              _controller.scanError ?? '未知错误',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: theme.secondaryText.color,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          MouseRegion(
+                            cursor: SystemMouseCursors.click,
+                            child: GestureDetector(
+                              onTap: _controller.rescan,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 18,
+                                  vertical: 8,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: theme.text.color,
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                                child: Text(
+                                  '重试',
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500,
+                                    color: theme.background.color,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  CatalogPhase.ready => Stack(
                       children: [
-                        SizedBox(
-                          width: 340,
-                          child: _SidePanel(controller: _controller),
+                        Row(
+                          children: [
+                            SizedBox(
+                              width: 340,
+                              child: _SidePanel(
+                                controller: _controller,
+                                catalog: _controller.catalog!,
+                              ),
+                            ),
+                            Expanded(
+                              child: _MapArea(
+                                controller: _controller,
+                                catalog: _controller.catalog!,
+                              ),
+                            ),
+                          ],
                         ),
-                        Expanded(child: _MapArea(controller: _controller)),
+                        if (_controller.diskMenuOpen) ...[
+                          Positioned.fill(
+                            child: GestureDetector(
+                              behavior: HitTestBehavior.translucent,
+                              onTap: () => _controller.setDiskMenuOpen(false),
+                            ),
+                          ),
+                          Positioned(
+                            left: 22,
+                            top: 78,
+                            child: _DiskPickerOverlay(controller: _controller),
+                          ),
+                        ],
                       ],
                     ),
-                    if (_controller.diskMenuOpen) ...[
-                      Positioned.fill(
-                        child: GestureDetector(
-                          behavior: HitTestBehavior.translucent,
-                          onTap: () => _controller.setDiskMenuOpen(false),
-                        ),
-                      ),
-                      Positioned(
-                        left: 22,
-                        top: 78,
-                        child: _DiskPickerOverlay(controller: _controller),
-                      ),
-                    ],
-                  ],
-                ),
+                },
               ),
             );
           },
@@ -510,14 +641,14 @@ class _StrataRootViewState extends State<StrataRootView> {
 }
 
 class _SidePanel extends StatelessWidget {
-  const _SidePanel({required this.controller});
+  const _SidePanel({required this.controller, required this.catalog});
 
   final StrataController controller;
+  final MapCatalog catalog;
 
   @override
   Widget build(BuildContext context) {
     final theme = controller.theme;
-    final catalog = controller.catalog;
     final atTop = controller.focus == FileTree.root;
     final items = catalog
         .itemsIn(controller.focus)
@@ -951,14 +1082,15 @@ class _Figure extends StatelessWidget {
 }
 
 class _MapArea extends StatelessWidget {
-  const _MapArea({required this.controller});
+  const _MapArea({required this.controller, required this.catalog});
 
   final StrataController controller;
+  final MapCatalog catalog;
 
   @override
   Widget build(BuildContext context) {
     final theme = controller.theme;
-    final crumbs = controller.catalog.crumbsTo(controller.focus);
+    final crumbs = catalog.crumbsTo(controller.focus);
     final parentName = controller.focus != FileTree.root && crumbs.length > 1
         ? crumbs[crumbs.length - 2].name
         : null;
