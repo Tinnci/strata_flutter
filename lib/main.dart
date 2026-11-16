@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 import 'model/disk_backend.dart';
 import 'src/rust/frb_generated.dart';

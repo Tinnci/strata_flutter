@@ -67,7 +67,7 @@ class RustLib extends BaseEntrypoint<RustLibApi, RustLibApiImpl, RustLibWire> {
   String get codegenVersion => '2.13.0';
 
   @override
-  int get rustContentHash => 1696633107;
+  int get rustContentHash => -66947006;
 
   static const kDefaultExternalLibraryLoaderConfig =
       ExternalLibraryLoaderConfig(
@@ -86,6 +86,11 @@ abstract class RustLibApi extends BaseApi {
   Future<void> crateApiScanRevealInExplorer({required String path});
 
   Future<ScanResultData> crateApiScanScanDirectory({
+    required String rootPath,
+    required BigInt pruneBelowBytes,
+  });
+
+  Stream<ScanProgressEvent> crateApiScanScanDirectoryStream({
     required String rootPath,
     required BigInt pruneBelowBytes,
   });
@@ -211,6 +216,59 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     argNames: ["rootPath", "pruneBelowBytes"],
   );
 
+  @override
+  Stream<ScanProgressEvent> crateApiScanScanDirectoryStream({
+    required String rootPath,
+    required BigInt pruneBelowBytes,
+  }) {
+    final sink = RustStreamSink<ScanProgressEvent>();
+    unawaited(
+      handler.executeNormal(
+        NormalTask(
+          callFfi: (port_) {
+            final serializer = SseSerializer(generalizedFrbRustBinding);
+            sse_encode_String(rootPath, serializer);
+            sse_encode_u_64(pruneBelowBytes, serializer);
+            sse_encode_StreamSink_scan_progress_event_Sse(sink, serializer);
+            pdeCallFfi(
+              generalizedFrbRustBinding,
+              serializer,
+              funcId: 5,
+              port: port_,
+            );
+          },
+          codec: SseCodec(
+            decodeSuccessData: sse_decode_unit,
+            decodeErrorData: sse_decode_String,
+          ),
+          constMeta: kCrateApiScanScanDirectoryStreamConstMeta,
+          argValues: [rootPath, pruneBelowBytes, sink],
+          apiImpl: this,
+        ),
+      ),
+    );
+    return sink.stream;
+  }
+
+  TaskConstMeta get kCrateApiScanScanDirectoryStreamConstMeta =>
+      const TaskConstMeta(
+        debugName: "scan_directory_stream",
+        argNames: ["rootPath", "pruneBelowBytes", "sink"],
+      );
+
+  @protected
+  AnyhowException dco_decode_AnyhowException(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return AnyhowException(raw as String);
+  }
+
+  @protected
+  RustStreamSink<ScanProgressEvent>
+  dco_decode_StreamSink_scan_progress_event_Sse(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    throw UnimplementedError();
+  }
+
   @protected
   String dco_decode_String(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
@@ -224,9 +282,21 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ScanResultData dco_decode_box_autoadd_scan_result_data(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return dco_decode_scan_result_data(raw);
+  }
+
+  @protected
   int dco_decode_box_autoadd_u_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw as int;
+  }
+
+  @protected
+  List<LiveEntryStat> dco_decode_list_live_entry_stat(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return (raw as List<dynamic>).map(dco_decode_live_entry_stat).toList();
   }
 
   @protected
@@ -254,6 +324,25 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  LiveEntryStat dco_decode_live_entry_stat(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 3)
+      throw Exception('unexpected arr length: expect 3 but see ${arr.length}');
+    return LiveEntryStat(
+      name: dco_decode_String(arr[0]),
+      bytes: dco_decode_u_64(arr[1]),
+      isDir: dco_decode_bool(arr[2]),
+    );
+  }
+
+  @protected
+  ScanResultData? dco_decode_opt_box_autoadd_scan_result_data(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    return raw == null ? null : dco_decode_box_autoadd_scan_result_data(raw);
+  }
+
+  @protected
   int? dco_decode_opt_box_autoadd_u_32(dynamic raw) {
     // Codec=Dco (DartCObject based), see doc to use other codecs
     return raw == null ? null : dco_decode_box_autoadd_u_32(raw);
@@ -274,6 +363,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       isSmallGroup: dco_decode_bool(arr[5]),
       itemCount: dco_decode_u_32(arr[6]),
       children: dco_decode_list_prim_u_32_strict(arr[7]),
+    );
+  }
+
+  @protected
+  ScanProgressEvent dco_decode_scan_progress_event(dynamic raw) {
+    // Codec=Dco (DartCObject based), see doc to use other codecs
+    final arr = raw as List<dynamic>;
+    if (arr.length != 4)
+      throw Exception('unexpected arr length: expect 4 but see ${arr.length}');
+    return ScanProgressEvent(
+      entryCount: dco_decode_u_64(arr[0]),
+      scannedBytes: dco_decode_u_64(arr[1]),
+      topEntries: dco_decode_list_live_entry_stat(arr[2]),
+      finalResult: dco_decode_opt_box_autoadd_scan_result_data(arr[3]),
     );
   }
 
@@ -331,6 +434,20 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var inner = sse_decode_String(deserializer);
+    return AnyhowException(inner);
+  }
+
+  @protected
+  RustStreamSink<ScanProgressEvent>
+  sse_decode_StreamSink_scan_progress_event_Sse(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    throw UnimplementedError('Unreachable ()');
+  }
+
+  @protected
   String sse_decode_String(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     var inner = sse_decode_list_prim_u_8_strict(deserializer);
@@ -344,9 +461,31 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  ScanResultData sse_decode_box_autoadd_scan_result_data(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    return (sse_decode_scan_result_data(deserializer));
+  }
+
+  @protected
   int sse_decode_box_autoadd_u_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     return (sse_decode_u_32(deserializer));
+  }
+
+  @protected
+  List<LiveEntryStat> sse_decode_list_live_entry_stat(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    var len_ = sse_decode_i_32(deserializer);
+    var ans_ = <LiveEntryStat>[];
+    for (var idx_ = 0; idx_ < len_; ++idx_) {
+      ans_.add(sse_decode_live_entry_stat(deserializer));
+    }
+    return ans_;
   }
 
   @protected
@@ -392,6 +531,28 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  LiveEntryStat sse_decode_live_entry_stat(SseDeserializer deserializer) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_name = sse_decode_String(deserializer);
+    var var_bytes = sse_decode_u_64(deserializer);
+    var var_isDir = sse_decode_bool(deserializer);
+    return LiveEntryStat(name: var_name, bytes: var_bytes, isDir: var_isDir);
+  }
+
+  @protected
+  ScanResultData? sse_decode_opt_box_autoadd_scan_result_data(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    if (sse_decode_bool(deserializer)) {
+      return (sse_decode_box_autoadd_scan_result_data(deserializer));
+    } else {
+      return null;
+    }
+  }
+
+  @protected
   int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -422,6 +583,25 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
       isSmallGroup: var_isSmallGroup,
       itemCount: var_itemCount,
       children: var_children,
+    );
+  }
+
+  @protected
+  ScanProgressEvent sse_decode_scan_progress_event(
+    SseDeserializer deserializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    var var_entryCount = sse_decode_u_64(deserializer);
+    var var_scannedBytes = sse_decode_u_64(deserializer);
+    var var_topEntries = sse_decode_list_live_entry_stat(deserializer);
+    var var_finalResult = sse_decode_opt_box_autoadd_scan_result_data(
+      deserializer,
+    );
+    return ScanProgressEvent(
+      entryCount: var_entryCount,
+      scannedBytes: var_scannedBytes,
+      topEntries: var_topEntries,
+      finalResult: var_finalResult,
     );
   }
 
@@ -487,6 +667,32 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_AnyhowException(
+    AnyhowException self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.message, serializer);
+  }
+
+  @protected
+  void sse_encode_StreamSink_scan_progress_event_Sse(
+    RustStreamSink<ScanProgressEvent> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(
+      self.setupAndSerialize(
+        codec: SseCodec(
+          decodeSuccessData: sse_decode_scan_progress_event,
+          decodeErrorData: sse_decode_AnyhowException,
+        ),
+      ),
+      serializer,
+    );
+  }
+
+  @protected
   void sse_encode_String(String self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_list_prim_u_8_strict(utf8.encoder.convert(self), serializer);
@@ -499,9 +705,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_box_autoadd_scan_result_data(
+    ScanResultData self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_scan_result_data(self, serializer);
+  }
+
+  @protected
   void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     sse_encode_u_32(self, serializer);
+  }
+
+  @protected
+  void sse_encode_list_live_entry_stat(
+    List<LiveEntryStat> self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_i_32(self.length, serializer);
+    for (final item in self) {
+      sse_encode_live_entry_stat(item, serializer);
+    }
   }
 
   @protected
@@ -549,6 +776,30 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
   }
 
   @protected
+  void sse_encode_live_entry_stat(
+    LiveEntryStat self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_String(self.name, serializer);
+    sse_encode_u_64(self.bytes, serializer);
+    sse_encode_bool(self.isDir, serializer);
+  }
+
+  @protected
+  void sse_encode_opt_box_autoadd_scan_result_data(
+    ScanResultData? self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+
+    sse_encode_bool(self != null, serializer);
+    if (self != null) {
+      sse_encode_box_autoadd_scan_result_data(self, serializer);
+    }
+  }
+
+  @protected
   void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer) {
     // Codec=Sse (Serialization based), see doc to use other codecs
 
@@ -569,6 +820,18 @@ class RustLibApiImpl extends RustLibApiImplPlatform implements RustLibApi {
     sse_encode_bool(self.isSmallGroup, serializer);
     sse_encode_u_32(self.itemCount, serializer);
     sse_encode_list_prim_u_32_strict(self.children, serializer);
+  }
+
+  @protected
+  void sse_encode_scan_progress_event(
+    ScanProgressEvent self,
+    SseSerializer serializer,
+  ) {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    sse_encode_u_64(self.entryCount, serializer);
+    sse_encode_u_64(self.scannedBytes, serializer);
+    sse_encode_list_live_entry_stat(self.topEntries, serializer);
+    sse_encode_opt_box_autoadd_scan_result_data(self.finalResult, serializer);
   }
 
   @protected

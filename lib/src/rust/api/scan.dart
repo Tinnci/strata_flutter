@@ -7,7 +7,8 @@ import '../frb_generated.dart';
 
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`
+// These functions are ignored because they are not marked as `pub`: `run_scan`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `clone`, `clone`, `clone`, `clone`, `fmt`, `fmt`, `fmt`, `fmt`, `fmt`
 
 List<VolumeSummary> listVolumes() =>
     RustLib.instance.api.crateApiScanListVolumes();
@@ -20,11 +21,43 @@ Future<ScanResultData> scanDirectory({
   pruneBelowBytes: pruneBelowBytes,
 );
 
+Stream<ScanProgressEvent> scanDirectoryStream({
+  required String rootPath,
+  required BigInt pruneBelowBytes,
+}) => RustLib.instance.api.crateApiScanScanDirectoryStream(
+  rootPath: rootPath,
+  pruneBelowBytes: pruneBelowBytes,
+);
+
 Future<void> revealInExplorer({required String path}) =>
     RustLib.instance.api.crateApiScanRevealInExplorer(path: path);
 
 Future<void> moveToTrash({required String path}) =>
     RustLib.instance.api.crateApiScanMoveToTrash(path: path);
+
+class LiveEntryStat {
+  final String name;
+  final BigInt bytes;
+  final bool isDir;
+
+  const LiveEntryStat({
+    required this.name,
+    required this.bytes,
+    required this.isDir,
+  });
+
+  @override
+  int get hashCode => name.hashCode ^ bytes.hashCode ^ isDir.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is LiveEntryStat &&
+          runtimeType == other.runtimeType &&
+          name == other.name &&
+          bytes == other.bytes &&
+          isDir == other.isDir;
+}
 
 class ScanNodeData {
   final int id;
@@ -71,6 +104,37 @@ class ScanNodeData {
           isSmallGroup == other.isSmallGroup &&
           itemCount == other.itemCount &&
           children == other.children;
+}
+
+class ScanProgressEvent {
+  final BigInt entryCount;
+  final BigInt scannedBytes;
+  final List<LiveEntryStat> topEntries;
+  final ScanResultData? finalResult;
+
+  const ScanProgressEvent({
+    required this.entryCount,
+    required this.scannedBytes,
+    required this.topEntries,
+    this.finalResult,
+  });
+
+  @override
+  int get hashCode =>
+      entryCount.hashCode ^
+      scannedBytes.hashCode ^
+      topEntries.hashCode ^
+      finalResult.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is ScanProgressEvent &&
+          runtimeType == other.runtimeType &&
+          entryCount == other.entryCount &&
+          scannedBytes == other.scannedBytes &&
+          topEntries == other.topEntries &&
+          finalResult == other.finalResult;
 }
 
 class ScanResultData {

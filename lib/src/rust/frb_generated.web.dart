@@ -24,13 +24,26 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   });
 
   @protected
+  AnyhowException dco_decode_AnyhowException(dynamic raw);
+
+  @protected
+  RustStreamSink<ScanProgressEvent>
+  dco_decode_StreamSink_scan_progress_event_Sse(dynamic raw);
+
+  @protected
   String dco_decode_String(dynamic raw);
 
   @protected
   bool dco_decode_bool(dynamic raw);
 
   @protected
+  ScanResultData dco_decode_box_autoadd_scan_result_data(dynamic raw);
+
+  @protected
   int dco_decode_box_autoadd_u_32(dynamic raw);
+
+  @protected
+  List<LiveEntryStat> dco_decode_list_live_entry_stat(dynamic raw);
 
   @protected
   Uint32List dco_decode_list_prim_u_32_strict(dynamic raw);
@@ -45,10 +58,19 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   List<VolumeSummary> dco_decode_list_volume_summary(dynamic raw);
 
   @protected
+  LiveEntryStat dco_decode_live_entry_stat(dynamic raw);
+
+  @protected
+  ScanResultData? dco_decode_opt_box_autoadd_scan_result_data(dynamic raw);
+
+  @protected
   int? dco_decode_opt_box_autoadd_u_32(dynamic raw);
 
   @protected
   ScanNodeData dco_decode_scan_node_data(dynamic raw);
+
+  @protected
+  ScanProgressEvent dco_decode_scan_progress_event(dynamic raw);
 
   @protected
   ScanResultData dco_decode_scan_result_data(dynamic raw);
@@ -69,13 +91,30 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   VolumeSummary dco_decode_volume_summary(dynamic raw);
 
   @protected
+  AnyhowException sse_decode_AnyhowException(SseDeserializer deserializer);
+
+  @protected
+  RustStreamSink<ScanProgressEvent>
+  sse_decode_StreamSink_scan_progress_event_Sse(SseDeserializer deserializer);
+
+  @protected
   String sse_decode_String(SseDeserializer deserializer);
 
   @protected
   bool sse_decode_bool(SseDeserializer deserializer);
 
   @protected
+  ScanResultData sse_decode_box_autoadd_scan_result_data(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   int sse_decode_box_autoadd_u_32(SseDeserializer deserializer);
+
+  @protected
+  List<LiveEntryStat> sse_decode_list_live_entry_stat(
+    SseDeserializer deserializer,
+  );
 
   @protected
   Uint32List sse_decode_list_prim_u_32_strict(SseDeserializer deserializer);
@@ -94,10 +133,23 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  LiveEntryStat sse_decode_live_entry_stat(SseDeserializer deserializer);
+
+  @protected
+  ScanResultData? sse_decode_opt_box_autoadd_scan_result_data(
+    SseDeserializer deserializer,
+  );
+
+  @protected
   int? sse_decode_opt_box_autoadd_u_32(SseDeserializer deserializer);
 
   @protected
   ScanNodeData sse_decode_scan_node_data(SseDeserializer deserializer);
+
+  @protected
+  ScanProgressEvent sse_decode_scan_progress_event(
+    SseDeserializer deserializer,
+  );
 
   @protected
   ScanResultData sse_decode_scan_result_data(SseDeserializer deserializer);
@@ -121,13 +173,37 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   int sse_decode_i_32(SseDeserializer deserializer);
 
   @protected
+  void sse_encode_AnyhowException(
+    AnyhowException self,
+    SseSerializer serializer,
+  );
+
+  @protected
+  void sse_encode_StreamSink_scan_progress_event_Sse(
+    RustStreamSink<ScanProgressEvent> self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_String(String self, SseSerializer serializer);
 
   @protected
   void sse_encode_bool(bool self, SseSerializer serializer);
 
   @protected
+  void sse_encode_box_autoadd_scan_result_data(
+    ScanResultData self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_box_autoadd_u_32(int self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_list_live_entry_stat(
+    List<LiveEntryStat> self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_list_prim_u_32_strict(
@@ -154,10 +230,25 @@ abstract class RustLibApiImplPlatform extends BaseApiImpl<RustLibWire> {
   );
 
   @protected
+  void sse_encode_live_entry_stat(LiveEntryStat self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_box_autoadd_scan_result_data(
+    ScanResultData? self,
+    SseSerializer serializer,
+  );
+
+  @protected
   void sse_encode_opt_box_autoadd_u_32(int? self, SseSerializer serializer);
 
   @protected
   void sse_encode_scan_node_data(ScanNodeData self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_scan_progress_event(
+    ScanProgressEvent self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_scan_result_data(

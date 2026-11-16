@@ -1,5 +1,7 @@
+use crate::frb_generated::StreamSink;
 use std::path::Path;
 use std::process::Command;
+use std::time::Instant;
 
 #[derive(Debug, Clone)]
 pub struct VolumeSummary {
@@ -30,19 +32,59 @@ pub struct ScanResultData {
     pub nodes: Vec<ScanNodeData>,
 }
 
+#[derive(Debug, Clone)]
+pub struct LiveEntryStat {
+    pub name: String,
+    pub bytes: u64,
+    pub is_dir: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct ScanProgressEvent {
+    pub entry_count: u64,
+    pub scanned_bytes: u64,
+    pub top_entries: Vec<LiveEntryStat>,
+    pub final_result: Option<ScanResultData>,
+}
+
 #[flutter_rust_bridge::frb(sync)]
 pub fn list_volumes() -> Vec<VolumeSummary> {
     crate::platform::list_volumes()
 }
 
 pub fn scan_directory(root_path: String, prune_below_bytes: u64) -> Result<ScanResultData, String> {
+    run_scan(root_path, prune_below_bytes, None)
+}
+
+pub fn scan_directory_stream(
+    root_path: String,
+    prune_below_bytes: u64,
+    sink: StreamSink<ScanProgressEvent>,
+) -> Result<(), String> {
+    let result = run_scan(root_path, prune_below_bytes, Some(&sink))?;
+    let _ = sink.add(ScanProgressEvent {
+        entry_count: result.entry_count,
+        scanned_bytes: result.total_scanned_bytes,
+        top_entries: Vec::new(),
+        final_result: Some(result),
+    });
+    Ok(())
+}
+
+fn run_scan(
+    root_path: String,
+    prune_below_bytes: u64,
+    sink: Option<&StreamSink<ScanProgressEvent>>,
+) -> Result<ScanResultData, String> {
     let root = Path::new(&root_path);
     if !root.exists() {
-        return Err(format!("Path does not exist: {root_path}"));
+      return Err(format!("Path does not exist: {root_path}"));
     }
 
     let mut nodes: Vec<ScanNodeData> = Vec::with_capacity(4096);
     let mut entry_count: u64 = 0;
+    let mut scanned_bytes: u64 = 0;
+    let mut last_emit = Instant::now();
 
     let root_name = root
         .file_name()
@@ -61,18 +103,51 @@ pub fn scan_directory(root_path: String, prune_below_bytes: u64) -> Result<ScanR
         children: Vec::new(),
     });
 
+    let mut on_progress = |nodes: &[ScanNodeData], count: u64, bytes: u64| {
+        let Some(sink) = sink else { return };
+        if last_emit.elapsed().as_millis() < 220 {
+            return;
+        }
+        last_emit = Instant::now();
+        let mut top_entries: Vec<LiveEntryStat> = nodes[0]
+            .children
+            .iter()
+            .filter_map(|&cid| {
+                let n = &nodes[cid as usize];
+                if n.size > 0 && !n.is_small_group {
+                    Some(LiveEntryStat {
+                        name: n.name.clone(),
+                        bytes: n.size,
+                        is_dir: n.is_dir,
+                    })
+                } else {
+                    None
+                }
+            })
+            .collect();
+        top_entries.sort_by(|a, b| b.bytes.cmp(&a.bytes));
+        let _ = sink.add(ScanProgressEvent {
+            entry_count: count,
+            scanned_bytes: bytes,
+            top_entries,
+            final_result: None,
+        });
+    };
+
     crate::platform::scan_recursive(
         root,
         0,
         prune_below_bytes,
         &mut nodes,
         &mut entry_count,
+        &mut scanned_bytes,
+        &mut on_progress,
     );
 
-    // Compute sizes bottom-up and sort children descending by size.
+    // Recompute exact bottom-up sizes and sort children descending by size.
     for id in (0..nodes.len()).rev() {
         if nodes[id].is_dir {
-            let mut sum = nodes[id].size;
+            let mut sum = 0u64;
             for &child_id in &nodes[id].children {
                 sum = sum.saturating_add(nodes[child_id as usize].size);
             }

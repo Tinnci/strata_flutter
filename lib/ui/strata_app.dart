@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:material_ui/material_ui.dart';
@@ -11,6 +12,7 @@ import '../motion/motion_state.dart';
 import '../render/map_renderer.dart';
 import '../scene/map_scene.dart';
 import '../theme/theme.dart';
+import 'loading_pebbles.dart';
 
 class HoverInfo {
   const HoverInfo({
@@ -54,6 +56,9 @@ class StrataController extends ChangeNotifier {
   bool _scanning = false;
   bool _diskMenuOpen = false;
   bool _disposed = false;
+  int _scanEntries = 0;
+  int _scanBytes = 0;
+  StreamSubscription<ScanUpdate>? _scanSub;
   String? _scanError;
   StrataTheme _theme = StrataTheme.abyss;
   MapMode _mode = MapMode.bubbles;
@@ -83,6 +88,8 @@ class StrataController extends ChangeNotifier {
   DiskVolume? get selectedVolume => _selectedVolume;
   bool get scanning => _scanning;
   bool get diskMenuOpen => _diskMenuOpen;
+  int get scanEntries => _scanEntries;
+  int get scanBytes => _scanBytes;
   String? get scanError => _scanError;
 
   void setDiskMenuOpen(bool open) {
@@ -142,31 +149,70 @@ class StrataController extends ChangeNotifier {
     String rootPath, {
     DiskVolume? volume,
   }) async {
-    if (!backend.supportsSystemActions || _scanning) return;
+    if (!backend.supportsSystemActions || _disposed) return;
+    await _scanSub?.cancel();
+    _scanSub = null;
+
     _scanning = true;
+    _scanEntries = 0;
+    _scanBytes = 0;
     _scanError = null;
     if (_catalog == null) {
       _phase = CatalogPhase.loading;
     }
-    notifyListeners();
+    _safeNotify();
 
-    try {
-      _catalog = await backend.scanPath(rootPath, volume: volume);
-      _phase = CatalogPhase.ready;
-      _focus = FileTree.root;
-      _highlighted = null;
-      _flowFocus = null;
-      pointer.value = const PointerState();
-      _rebuild(MapTransitionKind.swap);
-    } catch (e) {
-      _scanError = e.toString();
-      if (_catalog == null) {
-        _phase = CatalogPhase.error;
-      }
-    } finally {
-      _scanning = false;
-      notifyListeners();
-    }
+    final completer = Completer<void>();
+    var hadLiveMap = false;
+
+    _scanSub = backend.watchScanPath(rootPath, volume: volume).listen(
+      (update) {
+        if (_disposed) return;
+        _scanEntries = update.entryCount;
+        _scanBytes = update.scannedBytes;
+
+        final nextCatalog = update.catalog;
+        if (nextCatalog != null) {
+          final isFirstLive = _catalog == null;
+          _catalog = nextCatalog;
+          _phase = CatalogPhase.ready;
+          if (update.isFinal) {
+            _focus = FileTree.root;
+            _highlighted = null;
+            _flowFocus = null;
+            pointer.value = const PointerState();
+            _rebuild(
+              hadLiveMap ? MapTransitionKind.none : MapTransitionKind.swap,
+            );
+          } else if (_focus == FileTree.root) {
+            hadLiveMap = true;
+            _rebuild(
+              isFirstLive ? MapTransitionKind.popIn : MapTransitionKind.none,
+            );
+          }
+        }
+        _safeNotify();
+      },
+      onError: (Object e) {
+        if (_disposed) return;
+        _scanError = e.toString();
+        if (_catalog == null) {
+          _phase = CatalogPhase.error;
+        }
+        _scanning = false;
+        _safeNotify();
+        if (!completer.isCompleted) completer.complete();
+      },
+      onDone: () {
+        if (!_disposed) {
+          _scanning = false;
+          _safeNotify();
+        }
+        if (!completer.isCompleted) completer.complete();
+      },
+    );
+
+    await completer.future;
   }
 
   Future<void> revealItem(MapItem item) async {
@@ -460,6 +506,7 @@ class StrataController extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _scanSub?.cancel();
     pointer.dispose();
     canvasTick.dispose();
     super.dispose();
@@ -518,31 +565,12 @@ class _StrataRootViewState extends State<StrataRootView> {
                   fontFamily: 'Segoe UI',
                 ),
                 child: switch (_controller.phase) {
-                  CatalogPhase.loading => Center(
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2.2,
-                              color: theme.tones[0].color,
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Text(
-                            _controller.selectedVolume != null
-                                ? '正在扫描 ${_controller.selectedVolume!.name}…'
-                                : '正在读取磁盘列表…',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                              color: theme.text.color,
-                            ),
-                          ),
-                        ],
-                      ),
+                  CatalogPhase.loading => StrataLoadingView(
+                      theme: theme,
+                      volume: _controller.selectedVolume,
+                      entryCount: _controller.scanEntries,
+                      scannedBytes: _controller.scanBytes,
+                      themeDots: _ThemeDots(controller: _controller),
                     ),
                   CatalogPhase.error => Center(
                       child: Column(
@@ -763,10 +791,13 @@ class _SidePanel extends StatelessWidget {
             children: [
               if (controller.scanning)
                 Text(
-                  '正在扫描磁盘…',
+                  controller.scanEntries > 0
+                      ? '正在扫描 · 已看过 ${Format.count(controller.scanEntries)} 项'
+                      : '正在扫描磁盘…',
                   style: TextStyle(
                     fontSize: 12,
                     color: theme.secondaryText.color,
+                    fontFeatures: const [FontFeature.tabularFigures()],
                   ),
                 )
               else ...[
@@ -869,7 +900,7 @@ class _DiskHeader extends StatelessWidget {
           children: [
             Expanded(
               child: _Figure(
-                label: '文件',
+                label: catalog.isLive ? '已扫到' : '文件',
                 value: Format.size(files),
                 swatch: solid,
                 theme: theme,
@@ -877,7 +908,7 @@ class _DiskHeader extends StatelessWidget {
             ),
             Expanded(
               child: _Figure(
-                label: '系统与保留',
+                label: catalog.isLive ? '还没扫到' : '系统与保留',
                 value: Format.size(hidden),
                 swatch: muted,
                 theme: theme,

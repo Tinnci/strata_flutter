@@ -115,12 +115,14 @@ mod imp {
         volumes
     }
 
-    pub fn scan_recursive(
+    pub fn scan_recursive<F: FnMut(&[ScanNodeData], u64, u64)>(
         dir: &Path,
         parent_id: u32,
         prune_below_bytes: u64,
         nodes: &mut Vec<ScanNodeData>,
         entry_count: &mut u64,
+        scanned_bytes: &mut u64,
+        on_progress: &mut F,
     ) {
         let mut pattern = dir.as_os_str().encode_wide().collect::<Vec<u16>>();
         if !pattern.ends_with(&['\\' as u16]) {
@@ -147,6 +149,7 @@ mod imp {
 
         let mut small_bytes: u64 = 0;
         let mut small_count: u32 = 0;
+        let top_ancestor = find_top_ancestor(nodes, parent_id);
 
         loop {
             let name_len = data
@@ -179,10 +182,23 @@ mod imp {
                         });
                         nodes[parent_id as usize].children.push(child_id);
                         let sub_path = dir.join(&name);
-                        scan_recursive(&sub_path, child_id, prune_below_bytes, nodes, entry_count);
+                        scan_recursive(
+                            &sub_path,
+                            child_id,
+                            prune_below_bytes,
+                            nodes,
+                            entry_count,
+                            scanned_bytes,
+                            on_progress,
+                        );
                     } else {
                         let size =
                             ((data.nFileSizeHigh as u64) << 32) | (data.nFileSizeLow as u64);
+                        *scanned_bytes = scanned_bytes.saturating_add(size);
+                        if let Some(top_id) = top_ancestor {
+                            nodes[top_id as usize].size =
+                                nodes[top_id as usize].size.saturating_add(size);
+                        }
                         if size < prune_below_bytes {
                             small_bytes = small_bytes.saturating_add(size);
                             small_count = small_count.saturating_add(1);
@@ -201,6 +217,10 @@ mod imp {
                             nodes[parent_id as usize].children.push(child_id);
                         }
                     }
+                }
+
+                if (*entry_count & 0xFF) == 0 {
+                    on_progress(nodes, *entry_count, *scanned_bytes);
                 }
             }
 
@@ -226,6 +246,19 @@ mod imp {
             });
             nodes[parent_id as usize].children.push(group_id);
         }
+    }
+
+    fn find_top_ancestor(nodes: &[ScanNodeData], mut id: u32) -> Option<u32> {
+        if id == 0 {
+            return None;
+        }
+        while let Some(p) = nodes[id as usize].parent {
+            if p == 0 {
+                return Some(id);
+            }
+            id = p;
+        }
+        None
     }
 
     pub fn move_to_trash(path: &str) -> Result<(), String> {
@@ -266,12 +299,14 @@ mod imp {
         }]
     }
 
-    pub fn scan_recursive(
+    pub fn scan_recursive<F: FnMut(&[ScanNodeData], u64, u64)>(
         dir: &Path,
         parent_id: u32,
         prune_below_bytes: u64,
         nodes: &mut Vec<ScanNodeData>,
         entry_count: &mut u64,
+        scanned_bytes: &mut u64,
+        on_progress: &mut F,
     ) {
         let Ok(entries) = fs::read_dir(dir) else {
             return;
@@ -301,9 +336,18 @@ mod imp {
                     children: Vec::new(),
                 });
                 nodes[parent_id as usize].children.push(child_id);
-                scan_recursive(&entry.path(), child_id, prune_below_bytes, nodes, entry_count);
+                scan_recursive(
+                    &entry.path(),
+                    child_id,
+                    prune_below_bytes,
+                    nodes,
+                    entry_count,
+                    scanned_bytes,
+                    on_progress,
+                );
             } else {
                 let size = meta.len();
+                *scanned_bytes = scanned_bytes.saturating_add(size);
                 if size < prune_below_bytes {
                     small_bytes = small_bytes.saturating_add(size);
                     small_count = small_count.saturating_add(1);
@@ -321,6 +365,9 @@ mod imp {
                     });
                     nodes[parent_id as usize].children.push(child_id);
                 }
+            }
+            if (*entry_count & 0xFF) == 0 {
+                on_progress(nodes, *entry_count, *scanned_bytes);
             }
         }
 

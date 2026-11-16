@@ -314,6 +314,68 @@ class MapCatalog {
           : null,
     );
   }
+
+  static MapCatalog fromLiveSnapshot({
+    required String rootPath,
+    required int entryCount,
+    required List<rust.LiveEntryStat> topEntries,
+    DiskVolume? volume,
+  }) {
+    final childIds = <int>[];
+    final nodes = <TreeNode>[
+      const TreeNode(
+        id: 0,
+        parent: null,
+        name: '',
+        size: 0,
+        kind: NodeKind.directory,
+      ),
+    ];
+
+    var totalBytes = 0;
+    for (final entry in topEntries) {
+      final size = entry.bytes.toInt();
+      if (size <= 0) continue;
+      final id = nodes.length;
+      childIds.add(id);
+      totalBytes += size;
+      nodes.add(
+        TreeNode(
+          id: id,
+          parent: 0,
+          name: entry.name,
+          size: size,
+          kind: entry.isDir ? NodeKind.directory : NodeKind.file,
+        ),
+      );
+    }
+
+    nodes[0] = TreeNode(
+      id: 0,
+      parent: null,
+      name: volume?.name ?? rootPath,
+      size: totalBytes,
+      kind: NodeKind.directory,
+      children: childIds,
+    );
+
+    return MapCatalog(
+      tree: FileTree(
+        nodes: nodes,
+        rootPath: rootPath,
+        scannedAt: DateTime.now(),
+        entryCount: entryCount,
+      ),
+      volume: volume != null
+          ? VolumeInfo(
+              name: volume.name,
+              totalBytes: volume.totalBytes,
+              availableBytes: volume.availableBytes,
+            )
+          : null,
+      isLive: true,
+    );
+  }
 }
 
 abstract final class Format {

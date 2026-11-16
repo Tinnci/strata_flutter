@@ -29,6 +29,14 @@ class _FailingBackend implements DiskBackend {
       throw StateError('unimplemented');
 
   @override
+  Stream<ScanUpdate> watchScanPath(
+    String rootPath, {
+    DiskVolume? volume,
+    int pruneBelowBytes = 1000000,
+  }) =>
+      Stream.error(StateError('unimplemented'));
+
+  @override
   Future<void> revealInExplorer(String path) async {}
 
   @override
